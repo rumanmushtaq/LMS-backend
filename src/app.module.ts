@@ -27,6 +27,7 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
+import { TutorsModule } from './tutors/tutors.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     AuthModule,
     UsersModule,
     AdminModule,
+    TutorsModule,
   ],
   providers: [
     // Global JWT Auth Guard
@@ -98,4 +100,3 @@ import { RolesGuard } from './common/guards/roles.guard';
   ],
 })
 export class AppModule {}
-

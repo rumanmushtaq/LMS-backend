@@ -5,12 +5,8 @@ import { AdminService } from './services/admin.service';
 import { User, UserSchema } from '../users/schemas/user.schema';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
-  ],
   controllers: [AdminController],
   providers: [AdminService],
   exports: [AdminService],
 })
 export class AdminModule {}
-

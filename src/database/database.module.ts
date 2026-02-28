@@ -1,23 +1,11 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { MongooseModule } from '@nestjs/mongoose';
-import { User, UserSchema } from '../users/schemas/user.schema';
+import { Global, Module } from '@nestjs/common';
 import { AdminSeeder } from './seeders/admin.seeder';
+import { DatabaseProvider } from './database.provider';
 
+@Global()
 @Module({
-  imports: [
-    MongooseModule.forRootAsync({
-      imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        uri: configService.get<string>('database.uri'),
-        autoIndex: true,
-        autoCreate: true,
-      }),
-      inject: [ConfigService],
-    }),
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
-  ],
+  imports: [...DatabaseProvider],
+  exports: [...DatabaseProvider],
   providers: [AdminSeeder],
 })
 export class DatabaseModule {}
-
