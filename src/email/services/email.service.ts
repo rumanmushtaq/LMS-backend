@@ -54,7 +54,10 @@ export class EmailService {
       await this.transporter.verify();
       this.logger.log('SMTP connection established successfully');
     } catch (error) {
-      this.logger.warn('SMTP connection failed - emails will not be sent:', error);
+      this.logger.warn(
+        'SMTP connection failed - emails will not be sent:',
+        error,
+      );
     }
   }
 
@@ -76,7 +79,9 @@ export class EmailService {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`Email sent successfully to ${options.to} (ID: ${info.messageId})`);
+      this.logger.log(
+        `Email sent successfully to ${options.to} (ID: ${info.messageId})`,
+      );
       return true;
     } catch (error) {
       this.logger.error(`Failed to send email to ${options.to}:`, error);
@@ -89,7 +94,7 @@ export class EmailService {
     firstName: string,
     token: string,
   ): Promise<boolean> {
-    const verificationUrl = `${this.frontendUrl}/auth/verify-email?token=${token}`;
+    const verificationUrl = `${this.frontendUrl}/api/v1/auth/verify-email?token=${token}`;
 
     const templateData = {
       ...this.getBaseTemplateData(),

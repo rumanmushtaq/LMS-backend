@@ -22,6 +22,7 @@ import {
   AdminUpdateUserDto,
   UserQueryDto,
 } from '../dto/admin-user.dto';
+import { GetStudentsQueryDto } from '../../users/dto/get-students.dto';
 
 export interface PaginatedUsers {
   users: UserDocument[];
@@ -321,6 +322,177 @@ export class AdminService {
     this.logger.log(`Password reset by admin for user: ${user.email}`);
 
     return { message: 'Password reset successfully' };
+  }
+
+  // =====================
+  // STUDENT MANAGEMENT
+  // =====================
+
+  async getStudents(query: GetStudentsQueryDto) {
+    const {
+      search,
+      status,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      emailVerified,
+    } = query;
+
+    // Build filter object
+    const filters: FilterQuery<User> = { role: UserRole.STUDENT };
+
+    // Search filter (name or email)
+    if (search) {
+      filters.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    // Status filter
+    if (status) {
+      filters.status = status;
+    }
+
+    // Email verified filter
+    if (emailVerified !== undefined) {
+      filters.emailVerified = emailVerified;
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      filters.createdAt = {};
+      if (startDate) {
+        filters.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        filters.createdAt.$lte = new Date(endDate);
+      }
+    }
+
+    // Pagination
+    const skip = (page - 1) * limit;
+
+    // Sorting
+    const sortOptions: Record<string, 1 | -1> = {};
+    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    // Execute query
+    const [students, total] = await Promise.all([
+      this.userModel
+        .find(filters)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.userModel.countDocuments(filters),
+    ]);
+
+    return {
+      data: students,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getStudentById(studentId: string): Promise<UserDocument> {
+    const student = await this.userModel
+      .findOne({ _id: studentId, role: UserRole.STUDENT })
+      .exec();
+
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+
+    return student;
+  }
+
+  async updateStudent(
+    studentId: string,
+    updateStudentDto: AdminUpdateUserDto,
+  ): Promise<UserDocument> {
+    const student = await this.getStudentById(studentId);
+
+    const { firstName, lastName, role, status, emailVerified } = updateStudentDto;
+
+    // Prevent changing role to non-student
+    if (role !== undefined && role !== UserRole.STUDENT) {
+      throw new BadRequestException('Cannot change student role to non-student role');
+    }
+
+    if (firstName !== undefined) student.firstName = firstName;
+    if (lastName !== undefined) student.lastName = lastName;
+    if (status !== undefined) student.status = status;
+    if (emailVerified !== undefined) student.emailVerified = emailVerified;
+
+    await student.save();
+
+    this.logger.log(`Student updated by admin: ${student.email}`);
+
+    return student;
+  }
+
+  async updateStudentStatus(
+    studentId: string,
+    updateStatusDto: UpdateUserStatusDto,
+  ): Promise<UserDocument> {
+    const student = await this.getStudentById(studentId);
+
+    student.status = updateStatusDto.status;
+
+    // Invalidate refresh token if suspending
+    if (updateStatusDto.status === UserStatus.SUSPENDED) {
+      student.refreshTokenHash = null;
+    }
+
+    await student.save();
+
+    this.logger.log(
+      `Student status updated: ${student.email} -> ${updateStatusDto.status}`,
+    );
+
+    return student;
+  }
+
+  async suspendStudent(studentId: string): Promise<UserDocument> {
+    const student = await this.getStudentById(studentId);
+
+    student.status = UserStatus.SUSPENDED;
+    student.refreshTokenHash = null; // Invalidate sessions
+    await student.save();
+
+    this.logger.log(`Student suspended: ${student.email}`);
+
+    return student;
+  }
+
+  async activateStudent(studentId: string): Promise<UserDocument> {
+    const student = await this.getStudentById(studentId);
+
+    student.status = UserStatus.ACTIVE;
+    await student.save();
+
+    this.logger.log(`Student activated: ${student.email}`);
+
+    return student;
+  }
+
+  async deleteStudent(studentId: string): Promise<{ message: string }> {
+    const student = await this.getStudentById(studentId);
+
+    await this.userModel.findByIdAndDelete(studentId).exec();
+
+    this.logger.log(`Student deleted by admin: ${student.email}`);
+
+    return { message: 'Student deleted successfully' };
   }
 }
 

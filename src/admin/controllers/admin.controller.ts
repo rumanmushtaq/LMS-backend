@@ -32,6 +32,7 @@ import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../users/schemas/user.schema';
+import { GetStudentsQueryDto } from '../../users/dto/get-students.dto';
 
 @ApiExcludeController()
 @ApiTags('Admin')
@@ -163,6 +164,89 @@ export class AdminController {
   @ApiParam({ name: 'id', description: 'User ID' })
   async deleteUser(@Param('id') id: string) {
     return this.adminService.deleteUser(id);
+  }
+
+  // =====================
+  // STUDENT MANAGEMENT
+  // =====================
+
+  @Get('students')
+  @ApiOperation({ summary: 'Get all students with pagination and filters' })
+  @ApiResponse({ status: 200, description: 'Students list retrieved' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({ name: 'emailVerified', required: false, type: Boolean })
+  async getStudents(@Query() query: GetStudentsQueryDto) {
+    return this.adminService.getStudents(query);
+  }
+
+  @Get('students/:id')
+  @ApiOperation({ summary: 'Get student by ID' })
+  @ApiResponse({ status: 200, description: 'Student retrieved' })
+  @ApiResponse({ status: 404, description: 'Student not found' })
+  @ApiParam({ name: 'id', description: 'Student ID' })
+  async getStudentById(@Param('id') id: string) {
+    return this.adminService.getStudentById(id);
+  }
+
+  @Patch('students/:id')
+  @ApiOperation({ summary: 'Update student details' })
+  @ApiResponse({ status: 200, description: 'Student updated successfully' })
+  @ApiResponse({ status: 404, description: 'Student not found' })
+  @ApiParam({ name: 'id', description: 'Student ID' })
+  async updateStudent(
+    @Param('id') id: string,
+    @Body() updateStudentDto: AdminUpdateUserDto,
+  ) {
+    return this.adminService.updateStudent(id, updateStudentDto);
+  }
+
+  @Patch('students/:id/status')
+  @ApiOperation({ summary: 'Update student status' })
+  @ApiResponse({ status: 200, description: 'Status updated successfully' })
+  @ApiResponse({ status: 404, description: 'Student not found' })
+  @ApiParam({ name: 'id', description: 'Student ID' })
+  async updateStudentStatus(
+    @Param('id') id: string,
+    @Body() updateStatusDto: UpdateUserStatusDto,
+  ) {
+    return this.adminService.updateStudentStatus(id, updateStatusDto);
+  }
+
+  @Post('students/:id/suspend')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Suspend a student' })
+  @ApiResponse({ status: 200, description: 'Student suspended successfully' })
+  @ApiResponse({ status: 404, description: 'Student not found' })
+  @ApiParam({ name: 'id', description: 'Student ID' })
+  async suspendStudent(@Param('id') id: string) {
+    return this.adminService.suspendStudent(id);
+  }
+
+  @Post('students/:id/activate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Activate a student' })
+  @ApiResponse({ status: 200, description: 'Student activated successfully' })
+  @ApiResponse({ status: 404, description: 'Student not found' })
+  @ApiParam({ name: 'id', description: 'Student ID' })
+  async activateStudent(@Param('id') id: string) {
+    return this.adminService.activateStudent(id);
+  }
+
+  @Delete('students/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a student' })
+  @ApiResponse({ status: 200, description: 'Student deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Student not found' })
+  @ApiParam({ name: 'id', description: 'Student ID' })
+  async deleteStudent(@Param('id') id: string) {
+    return this.adminService.deleteStudent(id);
   }
 }
 

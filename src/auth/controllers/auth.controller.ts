@@ -6,7 +6,10 @@ import {
   HttpStatus,
   UseGuards,
   Get,
+  Query,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -76,7 +79,7 @@ export class AuthController {
   @Public()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify email address' })
+  @ApiOperation({ summary: 'Verify email address (API)' })
   @ApiResponse({ status: 200, description: 'Email verified successfully' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
   async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
@@ -84,10 +87,83 @@ export class AuthController {
   }
 
   @Public()
+  @Get('verify-email')
+  @ApiOperation({ summary: 'Verify email address via link from email' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  async verifyEmailGet(@Query('token') token: string, @Res() res: Response) {
+    try {
+      await this.authService.verifyEmail(token);
+      res.setHeader('Content-Type', 'text/html');
+      return res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Email Verified - Varona Academy</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+            .card { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); padding: 48px 40px; max-width: 440px; width: 100%; text-align: center; }
+            .icon { width: 64px; height: 64px; border-radius: 50%; background: #e6f9f0; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; }
+            .icon svg { width: 32px; height: 32px; color: #22c55e; }
+            h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 12px; }
+            p { font-size: 15px; color: #64748b; line-height: 1.6; margin-bottom: 24px; }
+            a.btn { display: inline-block; background: #6366f1; color: #fff; text-decoration: none; padding: 12px 32px; border-radius: 50px; font-weight: 600; font-size: 15px; transition: background 0.2s; }
+            a.btn:hover { background: #4f46e5; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>
+            <h1>Email Verified!</h1>
+            <p>Your email has been verified successfully. You can now log in to your account.</p>
+            <a href="http://localhost:3000/login" class="btn">Go to Login</a>
+          </div>
+        </body>
+        </html>
+      `);
+    } catch (error) {
+      res.setHeader('Content-Type', 'text/html');
+      return res.status(400).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Verification Failed - Varona Academy</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+            .card { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); padding: 48px 40px; max-width: 440px; width: 100%; text-align: center; }
+            .icon { width: 64px; height: 64px; border-radius: 50%; background: #fee2e2; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px; }
+            .icon svg { width: 32px; height: 32px; color: #ef4444; }
+            h1 { font-size: 24px; color: #1a1a2e; margin-bottom: 12px; }
+            p { font-size: 15px; color: #64748b; line-height: 1.6; margin-bottom: 24px; }
+            a.btn { display: inline-block; background: #1e293b; color: #fff; text-decoration: none; padding: 12px 32px; border-radius: 50px; font-weight: 600; font-size: 15px; transition: background 0.2s; }
+            a.btn:hover { background: #0f172a; }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="icon"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></div>
+            <h1>Verification Failed</h1>
+            <p>The verification link is invalid or has expired. Please try signing up again or request a new verification email.</p>
+            <a href="http://localhost:3000/signup" class="btn">Back to Sign Up</a>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+  }
+
+  @Public()
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification link' })
-  @ApiResponse({ status: 200, description: 'Verification email sent if account exists' })
+  @ApiResponse({
+    status: 200,
+    description: 'Verification email sent if account exists',
+  })
   async resendVerification(@Body() resendDto: ResendVerificationDto) {
     return this.authService.resendVerificationEmail(resendDto.email);
   }
@@ -96,7 +172,10 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset' })
-  @ApiResponse({ status: 200, description: 'Reset email sent if account exists' })
+  @ApiResponse({
+    status: 200,
+    description: 'Reset email sent if account exists',
+  })
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
     return this.authService.forgotPassword(forgotPasswordDto);
   }
@@ -225,4 +304,3 @@ export class AuthController {
     );
   }
 }
-
