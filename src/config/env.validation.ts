@@ -78,6 +78,18 @@ export class EnvironmentVariables {
   @IsNumber()
   @IsOptional()
   BCRYPT_SALT_ROUNDS: number = 12;
+
+  @IsString()
+  @IsOptional()
+  IMAGEKIT_PUBLIC_KEY: string = 'public_fake_key';
+
+  @IsString()
+  @IsOptional()
+  IMAGEKIT_PRIVATE_KEY: string = 'private_fake_key';
+
+  @IsString()
+  @IsOptional()
+  IMAGEKIT_URL_ENDPOINT: string = 'https://ik.imagekit.io/fake_endpoint';
 }
 
 export function validateEnv(config: Record<string, unknown>) {
@@ -95,4 +107,3 @@ export function validateEnv(config: Record<string, unknown>) {
 
   return validatedConfig;
 }
-

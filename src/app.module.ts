@@ -11,6 +11,7 @@ import {
   emailConfig,
   throttleConfig,
   securityConfig,
+  imagekitConfig,
   validateEnv,
 } from './config';
 
@@ -41,6 +42,7 @@ import { TutorsModule } from './tutors/tutors.module';
         emailConfig,
         throttleConfig,
         securityConfig,
+        imagekitConfig,
       ],
       validate: validateEnv,
       envFilePath: ['.env.local', '.env'],
