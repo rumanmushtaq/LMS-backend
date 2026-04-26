@@ -12,6 +12,8 @@ import {
   getTwoFactorEmailText,
   getWelcomeEmailHtml,
   getWelcomeEmailText,
+  getTeacherVerifiedEmailHtml,
+  getTeacherVerifiedEmailText,
 } from '../templates';
 
 export interface EmailOptions {
@@ -162,6 +164,26 @@ export class EmailService {
       subject: `Welcome to ${this.appName}!`,
       html: getWelcomeEmailHtml(templateData),
       text: getWelcomeEmailText(templateData),
+    });
+  }
+
+  async sendTeacherVerifiedEmail(
+    email: string,
+    firstName: string,
+  ): Promise<boolean> {
+    const loginUrl = `${this.frontendUrl}/login`;
+
+    const templateData = {
+      ...this.getBaseTemplateData(),
+      firstName,
+      loginUrl,
+    };
+
+    return this.sendEmail({
+      to: email,
+      subject: `Your teacher account is verified! - ${this.appName}`,
+      html: getTeacherVerifiedEmailHtml(templateData),
+      text: getTeacherVerifiedEmailText(templateData),
     });
   }
 }

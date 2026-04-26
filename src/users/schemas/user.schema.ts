@@ -124,6 +124,14 @@ export class User extends Document {
   @Prop({ type: String, default: null })
   taxFormUrl: string | null;
 
+  @ApiProperty({ description: 'URL of the signed contract' })
+  @Prop({ type: String, default: null })
+  contractSignatureUrl: string | null;
+
+  @ApiProperty({ description: 'List of KYC document URLs' })
+  @Prop({ type: [String], default: [] })
+  kycDocuments: string[];
+
   @ApiProperty({ description: 'KYC and profile data' })
   @Prop({ type: Object, default: {} })
   kycData: Record<string, any>;

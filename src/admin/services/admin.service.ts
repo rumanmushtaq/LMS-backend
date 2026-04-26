@@ -15,6 +15,7 @@ import {
   UserRole,
   UserStatus,
 } from '../../users/schemas/user.schema';
+import { EmailService } from '../../email/services/email.service';
 import {
   CreateAdminDto,
   UpdateUserStatusDto,
@@ -51,6 +52,7 @@ export class AdminService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
     private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {
     this.bcryptSaltRounds = this.configService.get<number>(
       'security.bcryptSaltRounds',
@@ -243,7 +245,9 @@ export class AdminService {
     user.role = updateRoleDto.role;
     await user.save();
 
-    this.logger.log(`User role updated: ${user.email} -> ${updateRoleDto.role}`);
+    this.logger.log(
+      `User role updated: ${user.email} -> ${updateRoleDto.role}`,
+    );
 
     return user;
   }
@@ -252,7 +256,9 @@ export class AdminService {
     const user = await this.getUserById(userId);
 
     if (user.role === UserRole.ADMIN) {
-      throw new BadRequestException('Cannot suspend admin users through this endpoint');
+      throw new BadRequestException(
+        'Cannot suspend admin users through this endpoint',
+      );
     }
 
     user.status = UserStatus.SUSPENDED;
@@ -279,7 +285,9 @@ export class AdminService {
     const user = await this.getUserById(userId);
 
     if (user.role === UserRole.ADMIN) {
-      throw new BadRequestException('Cannot delete admin users through this endpoint');
+      throw new BadRequestException(
+        'Cannot delete admin users through this endpoint',
+      );
     }
 
     await this.userModel.findByIdAndDelete(userId).exec();
@@ -313,7 +321,10 @@ export class AdminService {
   ): Promise<{ message: string }> {
     const user = await this.getUserById(userId);
 
-    const hashedPassword = await bcrypt.hash(newPassword, this.bcryptSaltRounds);
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      this.bcryptSaltRounds,
+    );
     user.password = hashedPassword;
     user.refreshTokenHash = null; // Invalidate all sessions
 
@@ -370,7 +381,9 @@ export class AdminService {
         filters.createdAt.$gte = new Date(startDate);
       }
       if (endDate) {
-        filters.createdAt.$lte = new Date(endDate);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filters.createdAt.$lte = end;
       }
     }
 
@@ -421,11 +434,14 @@ export class AdminService {
   ): Promise<UserDocument> {
     const student = await this.getStudentById(studentId);
 
-    const { firstName, lastName, role, status, emailVerified } = updateStudentDto;
+    const { firstName, lastName, role, status, emailVerified } =
+      updateStudentDto;
 
     // Prevent changing role to non-student
     if (role !== undefined && role !== UserRole.STUDENT) {
-      throw new BadRequestException('Cannot change student role to non-student role');
+      throw new BadRequestException(
+        'Cannot change student role to non-student role',
+      );
     }
 
     if (firstName !== undefined) student.firstName = firstName;
@@ -494,5 +510,140 @@ export class AdminService {
 
     return { message: 'Student deleted successfully' };
   }
-}
 
+  // =====================
+  // TUTOR MANAGEMENT
+  // =====================
+
+  async getTeachers(query: GetStudentsQueryDto) {
+    const {
+      search,
+      status,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      emailVerified,
+    } = query;
+
+    // Build filter object
+    const filters: FilterQuery<User> = { role: UserRole.TUTOR };
+
+    // Search filter (name or email)
+    if (search) {
+      filters.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    // Status filter
+    if (status) {
+      filters.status = status;
+    }
+
+    // Email verified filter
+    if (emailVerified !== undefined) {
+      filters.emailVerified = emailVerified;
+    }
+
+    // Date range filter
+    if (startDate || endDate) {
+      filters.createdAt = {};
+      if (startDate) {
+        filters.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filters.createdAt.$lte = end;
+      }
+    }
+
+    // Pagination
+    const skip = (page - 1) * limit;
+
+    // Sorting
+    const sortOptions: Record<string, 1 | -1> = {};
+    sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
+
+    // Execute query
+    const [tutors, total] = await Promise.all([
+      this.userModel
+        .find(filters)
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.userModel.countDocuments(filters),
+    ]);
+
+    return {
+      data: tutors,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getTeacherById(tutorId: string): Promise<UserDocument> {
+    const tutor = await this.userModel
+      .findOne({ _id: tutorId, role: UserRole.TUTOR })
+      .exec();
+
+    if (!tutor) {
+      throw new NotFoundException('Tutor not found');
+    }
+
+    return tutor;
+  }
+
+  async approveTeacher(tutorId: string): Promise<UserDocument> {
+    const tutor = await this.userModel
+      .findOne({ _id: tutorId, role: UserRole.TUTOR })
+      .exec();
+
+    if (!tutor) {
+      throw new NotFoundException('Tutor not found');
+    }
+
+    tutor.status = UserStatus.ACTIVE;
+    await tutor.save();
+
+    // Send verification email
+    await this.emailService.sendTeacherVerifiedEmail(
+      tutor.email,
+      tutor.firstName,
+    );
+
+    this.logger.log(`Tutor verified by admin: ${tutor.email}`);
+
+    return tutor;
+  }
+
+  async rejectTeacher(tutorId: string, reason?: string): Promise<UserDocument> {
+    const tutor = await this.userModel
+      .findOne({ _id: tutorId, role: UserRole.TUTOR })
+      .exec();
+
+    if (!tutor) {
+      throw new NotFoundException('Tutor not found');
+    }
+
+    tutor.status = UserStatus.SUSPENDED;
+    // We could store the reason in a separate field or log it
+    await tutor.save();
+
+    this.logger.log(
+      `Tutor rejected by admin: ${tutor.email}. Reason: ${reason || 'No reason provided'}`,
+    );
+
+    return tutor;
+  }
+}

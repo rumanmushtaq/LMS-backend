@@ -9,7 +9,7 @@ import {
   Patch,
   Post,
   Query,
-  UseGuards
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -23,7 +23,7 @@ import { CurrentUser } from '../../common/decorators';
 import { UserDocument } from '../schemas/user.schema';
 import { UsersService } from '../services/users.service';
 import { GetStudentsQueryDto } from '../dto/get-students.dto';
-
+import { UpdateProfileDto } from '../dto/update-profile.dto';
 
 @ApiExcludeController()
 @ApiTags('Users')
@@ -40,6 +40,15 @@ export class UsersController {
     return user;
   }
 
+  @Patch('profile')
+  @ApiOperation({ summary: 'Update current user profile' })
+  @ApiResponse({ status: 200, description: 'Profile updated successfully' })
+  async updateProfile(
+    @CurrentUser() user: UserDocument,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.usersService.updateProfile(user._id.toString(), dto);
+  }
 
   @Delete('account')
   @HttpCode(HttpStatus.OK)
@@ -49,4 +58,3 @@ export class UsersController {
     return this.usersService.deleteAccount(user);
   }
 }
-

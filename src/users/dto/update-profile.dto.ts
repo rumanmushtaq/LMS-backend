@@ -6,6 +6,7 @@ import {
   MinLength,
   IsUrl,
   Matches,
+  IsDateString,
 } from 'class-validator';
 
 export class UpdateProfileDto {
@@ -56,5 +57,38 @@ export class UpdateProfileDto {
   @IsOptional()
   @MaxLength(500, { message: 'Bio must be at most 500 characters' })
   bio?: string;
-}
 
+  @ApiPropertyOptional({
+    example: 'Male',
+    description: 'User gender',
+  })
+  @IsString()
+  @IsOptional()
+  gender?: string;
+
+  @ApiPropertyOptional({
+    example: '2000-01-16T00:00:00Z',
+    description: 'User Date of Birth',
+  })
+  @IsDateString()
+  @IsOptional()
+  dob?: string;
+
+  @ApiPropertyOptional({
+    description: 'Teacher bank account details',
+    type: 'object',
+    properties: {
+      bankName: { type: 'string' },
+      accountNumber: { type: 'string' },
+      routingNumber: { type: 'string' },
+      accountHolderName: { type: 'string' },
+    },
+  })
+  @IsOptional()
+  bankAccount?: {
+    bankName: string;
+    accountNumber: string;
+    routingNumber: string;
+    accountHolderName: string;
+  };
+}
