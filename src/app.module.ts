@@ -11,6 +11,7 @@ import {
   emailConfig,
   throttleConfig,
   securityConfig,
+  imagekitConfig,
   validateEnv,
 } from './config';
 
@@ -28,6 +29,10 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TutorsModule } from './tutors/tutors.module';
+import { InstructorsModule } from './instructors/instructors.module';
+import { CertificatesModule } from './certificates/certificates.module';
+import { CoursesModule } from './courses/courses.module';
+import { OrdersModule } from './orders/orders.module';
 
 @Module({
   imports: [
@@ -41,6 +46,7 @@ import { TutorsModule } from './tutors/tutors.module';
         emailConfig,
         throttleConfig,
         securityConfig,
+        imagekitConfig,
       ],
       validate: validateEnv,
       envFilePath: ['.env.local', '.env'],
@@ -65,6 +71,10 @@ import { TutorsModule } from './tutors/tutors.module';
     UsersModule,
     AdminModule,
     TutorsModule,
+    InstructorsModule,
+    CertificatesModule,
+    CoursesModule,
+    OrdersModule,
   ],
   providers: [
     // Global JWT Auth Guard

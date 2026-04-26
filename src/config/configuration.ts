@@ -41,3 +41,8 @@ export const securityConfig = registerAs('security', () => ({
   twoFaAppName: process.env.TWO_FA_APP_NAME || 'VaronaAcademy',
 }));
 
+export const imagekitConfig = registerAs('imagekit', () => ({
+  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+}));

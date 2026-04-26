@@ -52,7 +52,10 @@ export interface LoginResponse {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly bcryptSaltRounds: number;
-  private readonly twoFactorSessions: Map<string, { userId: string; otp?: string; expiresAt: Date }> = new Map();
+  private readonly twoFactorSessions: Map<
+    string,
+    { userId: string; otp?: string; expiresAt: Date }
+  > = new Map();
 
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
@@ -69,11 +72,13 @@ export class AuthService {
   // SIGNUP & VERIFICATION
   // =====================
 
-  async signup(signupDto: SignupDto): Promise<{ message: string }> {
+  async signup(signupDto: SignupDto): Promise<any> {
     const { email, firstName, lastName, password, role } = signupDto;
 
     // Check if user already exists
-    const existingUser = await this.userModel.findOne({ email: email.toLowerCase() }).exec();
+    const existingUser = await this.userModel
+      .findOne({ email: email.toLowerCase() })
+      .exec();
     if (existingUser) {
       throw new ConflictException('Email already registered');
     }
@@ -86,7 +91,7 @@ export class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, this.bcryptSaltRounds);
 
-    // Generate email verification token
+    // Generate email verification token (even if not sending it immediately for tutors)
     const verificationToken = generateSecureToken(32);
     const hashedVerificationToken = hashToken(verificationToken);
 
@@ -109,21 +114,49 @@ export class AuthService {
 
     await user.save();
 
-    // Send verification email
-    await this.emailService.sendVerificationEmail(
-      email,
-      firstName,
-      verificationToken,
-    );
-
     this.logger.log(`New user registered: ${email} (${role})`);
 
+    // For tutors, we don't send the email yet and we log them in immediately
+    if (role === UserRole.TUTOR) {
+      this.logger.log(
+        `Tutor detected, generating tokens and returning immediate response for ${email}`,
+      );
+      const tokens = await this.generateTokens(user);
+      user.refreshTokenHash = hashToken(tokens.refreshToken);
+      await user.save();
+
+      const response = {
+        message: 'Registration successful. Proceed to onboarding.',
+        user,
+        tokens,
+      };
+      this.logger.log(
+        `Returning tutor signup response: ${JSON.stringify({ ...response, user: user.email, tokens: 'HIDDEN' })}`,
+      );
+      return response;
+    }
+
+    this.logger.log(
+      `Student detected, sending verification email for ${email}`,
+    );
+    // For others (students), send verification email asynchronously
+    this.emailService
+      .sendVerificationEmail(email, firstName, verificationToken)
+      .catch((err) =>
+        this.logger.error(`Failed to send verification email to ${email}`, err),
+      );
+
     return {
-      message: 'Registration successful. Please check your email to verify your account.',
+      message:
+        'Registration successful. Please check your email to verify your account.',
     };
   }
 
-  async verifyEmail(token: string): Promise<{ message: string }> {
+  async verifyEmail(token: string): Promise<{
+    message: string;
+    tokens?: TokenPair | null;
+    user?: UserDocument;
+  }> {
     const hashedToken = hashToken(token);
 
     const user = await this.userModel
@@ -139,17 +172,35 @@ export class AuthService {
 
     // Update user
     user.emailVerified = true;
-    user.status = UserStatus.ACTIVE;
+
+    // For students, activate immediately. Tutors stay pending until admin verify.
+    if (user.role === UserRole.STUDENT) {
+      user.status = UserStatus.ACTIVE;
+      await this.emailService.sendWelcomeEmail(user.email, user.firstName);
+    }
+
     user.emailVerificationToken = null;
     user.emailVerificationTokenExpires = null;
-    await user.save();
 
-    // Send welcome email
-    await this.emailService.sendWelcomeEmail(user.email, user.firstName);
+    // Generate tokens for immediate onboarding if tutor
+    let tokens = null;
+    if (user.role === UserRole.TUTOR) {
+      tokens = await this.generateTokens(user);
+      user.refreshTokenHash = hashToken(tokens.refreshToken);
+    }
+
+    await user.save();
 
     this.logger.log(`Email verified for user: ${user.email}`);
 
-    return { message: 'Email verified successfully. You can now log in.' };
+    return {
+      message:
+        user.role === UserRole.TUTOR
+          ? 'Email verified. Please complete the onboarding steps.'
+          : 'Email verified successfully. You can now log in.',
+      tokens,
+      user: user.role === UserRole.TUTOR ? user : undefined,
+    };
   }
 
   async resendVerificationEmail(email: string): Promise<{ message: string }> {
@@ -159,7 +210,9 @@ export class AuthService {
 
     if (!user) {
       // Return generic message to prevent email enumeration
-      return { message: 'If the email exists, a verification link has been sent.' };
+      return {
+        message: 'If the email exists, a verification link has been sent.',
+      };
     }
 
     if (user.emailVerified) {
@@ -177,14 +230,19 @@ export class AuthService {
     user.emailVerificationTokenExpires = verificationExpires;
     await user.save();
 
-    // Send verification email
-    await this.emailService.sendVerificationEmail(
-      user.email,
-      user.firstName,
-      verificationToken,
-    );
+    // Send verification email asynchronously
+    this.emailService
+      .sendVerificationEmail(user.email, user.firstName, verificationToken)
+      .catch((err) =>
+        this.logger.error(
+          `Failed to resend verification email to ${user.email}`,
+          err,
+        ),
+      );
 
-    return { message: 'If the email exists, a verification link has been sent.' };
+    return {
+      message: 'If the email exists, a verification link has been sent.',
+    };
   }
 
   // =====================
@@ -216,6 +274,11 @@ export class AuthService {
       throw new UnauthorizedException(
         'Please verify your email before logging in',
       );
+    }
+
+    // Check teacher verification status
+    if (user.role === UserRole.TUTOR && user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('You are not login until verified');
     }
 
     // Check account status
@@ -323,7 +386,9 @@ export class AuthService {
       // Potential token theft - invalidate all sessions
       user.refreshTokenHash = null;
       await user.save();
-      throw new UnauthorizedException('Invalid refresh token - session invalidated');
+      throw new UnauthorizedException(
+        'Invalid refresh token - session invalidated',
+      );
     }
 
     // Generate new token pair (rotation)
@@ -361,7 +426,8 @@ export class AuthService {
       .exec();
 
     // Always return success to prevent email enumeration
-    const successMessage = 'If the email exists, a password reset link has been sent.';
+    const successMessage =
+      'If the email exists, a password reset link has been sent.';
 
     if (!user) {
       return { message: successMessage };
@@ -379,12 +445,15 @@ export class AuthService {
     user.passwordResetTokenExpires = resetExpires;
     await user.save();
 
-    // Send reset email
-    await this.emailService.sendPasswordResetEmail(
-      user.email,
-      user.firstName,
-      resetToken,
-    );
+    // Send reset email asynchronously
+    this.emailService
+      .sendPasswordResetEmail(user.email, user.firstName, resetToken)
+      .catch((err) =>
+        this.logger.error(
+          `Failed to send password reset email to ${user.email}`,
+          err,
+        ),
+      );
 
     this.logger.log(`Password reset requested for: ${user.email}`);
 
@@ -409,7 +478,10 @@ export class AuthService {
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, this.bcryptSaltRounds);
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      this.bcryptSaltRounds,
+    );
 
     // Update user
     user.password = hashedPassword;
@@ -420,7 +492,10 @@ export class AuthService {
 
     this.logger.log(`Password reset completed for: ${user.email}`);
 
-    return { message: 'Password reset successfully. Please log in with your new password.' };
+    return {
+      message:
+        'Password reset successfully. Please log in with your new password.',
+    };
   }
 
   async changePassword(
@@ -430,13 +505,19 @@ export class AuthService {
     const { currentPassword, newPassword } = changePasswordDto;
 
     // Verify current password
-    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    const isPasswordValid = await bcrypt.compare(
+      currentPassword,
+      user.password,
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Current password is incorrect');
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, this.bcryptSaltRounds);
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      this.bcryptSaltRounds,
+    );
 
     user.password = hashedPassword;
     user.refreshTokenHash = null; // Invalidate all sessions for security
@@ -451,7 +532,9 @@ export class AuthService {
   // TWO-FACTOR AUTHENTICATION
   // =====================
 
-  async generate2FASecret(user: UserDocument): Promise<{ secret: string; qrCodeUrl: string }> {
+  async generate2FASecret(
+    user: UserDocument,
+  ): Promise<{ secret: string; qrCodeUrl: string }> {
     if (user.twoFactorEnabled) {
       throw new BadRequestException('2FA is already enabled');
     }
@@ -469,7 +552,10 @@ export class AuthService {
     return { secret, qrCodeUrl };
   }
 
-  async enable2FA(user: UserDocument, totpCode: string): Promise<{ message: string }> {
+  async enable2FA(
+    user: UserDocument,
+    totpCode: string,
+  ): Promise<{ message: string }> {
     if (user.twoFactorEnabled) {
       throw new BadRequestException('2FA is already enabled');
     }
@@ -549,7 +635,11 @@ export class AuthService {
 
     // Send OTP via email if user prefers email 2FA
     // This is optional - user can also use authenticator app
-    await this.emailService.sendTwoFactorOTPEmail(user.email, user.firstName, otp);
+    await this.emailService.sendTwoFactorOTPEmail(
+      user.email,
+      user.firstName,
+      otp,
+    );
 
     return {
       user,
@@ -616,8 +706,13 @@ export class AuthService {
   // UTILITY METHODS
   // =====================
 
-  async validateUser(email: string, password: string): Promise<UserDocument | null> {
-    const user = await this.userModel.findOne({ email: email.toLowerCase() }).exec();
+  async validateUser(
+    email: string,
+    password: string,
+  ): Promise<UserDocument | null> {
+    const user = await this.userModel
+      .findOne({ email: email.toLowerCase() })
+      .exec();
 
     if (!user) {
       return null;
@@ -635,4 +730,3 @@ export class AuthService {
     return this.userModel.findById(userId).exec();
   }
 }
-

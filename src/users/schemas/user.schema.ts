@@ -14,6 +14,20 @@ export enum UserStatus {
   SUSPENDED = 'suspended',
 }
 
+export enum OnboardingStep {
+  SIGNED_UP = 'signed_up',
+  CONTRACT_ACCEPTED = 'contract_accepted',
+  TAX_SELECTED = 'tax_selected',
+  TAX_SUBMITTED = 'tax_submitted',
+  KYC_COMPLETED = 'kyc_completed',
+  COMPLETED = 'completed',
+}
+
+export enum TaxFormType {
+  W8BEN = 'W8BEN',
+  W9 = 'W9',
+}
+
 export type UserDocument = HydratedDocument<User>;
 
 @Schema({
@@ -82,6 +96,45 @@ export class User extends Document {
   @Prop({ type: String, default: null })
   refreshTokenHash: string | null;
 
+  // =====================
+  // ONBOARDING FIELDS
+  // =====================
+
+  @ApiProperty({ description: 'Current onboarding step', enum: OnboardingStep })
+  @Prop({
+    type: String,
+    enum: OnboardingStep,
+    default: OnboardingStep.SIGNED_UP,
+  })
+  onboardingStep: OnboardingStep;
+
+  @ApiProperty({ description: 'Timestamp when contract was accepted' })
+  @Prop({ type: Date, default: null })
+  contractAcceptedAt: Date | null;
+
+  @ApiProperty({ description: 'Whether the tutor is a US person' })
+  @Prop({ type: Boolean, default: null })
+  isUSPerson: boolean | null;
+
+  @ApiProperty({ description: 'Tax form type', enum: TaxFormType })
+  @Prop({ type: String, enum: TaxFormType, default: null })
+  taxFormType: TaxFormType | null;
+
+  @ApiProperty({ description: 'URL of the uploaded tax form' })
+  @Prop({ type: String, default: null })
+  taxFormUrl: string | null;
+
+  @ApiProperty({ description: 'URL of the signed contract' })
+  @Prop({ type: String, default: null })
+  contractSignatureUrl: string | null;
+
+  @ApiProperty({ description: 'List of KYC document URLs' })
+  @Prop({ type: [String], default: [] })
+  kycDocuments: string[];
+
+  @ApiProperty({ description: 'KYC and profile data' })
+  @Prop({ type: Object, default: {} })
+  kycData: Record<string, any>;
 
   @ApiProperty({ description: 'Last login timestamp' })
   @Prop({ type: Date, default: null })
@@ -107,4 +160,3 @@ UserSchema.index({ createdAt: -1 });
 UserSchema.virtual('fullName').get(function (this: User) {
   return `${this.firstName} ${this.lastName}`;
 });
-

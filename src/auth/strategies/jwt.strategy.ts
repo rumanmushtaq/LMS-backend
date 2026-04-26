@@ -4,7 +4,12 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { User, UserDocument, UserStatus } from '../../users/schemas/user.schema';
+import {
+  User,
+  UserDocument,
+  UserStatus,
+  UserRole,
+} from '../../users/schemas/user.schema';
 import { JwtPayload } from '../../common/decorators/current-user.decorator';
 
 @Injectable()
@@ -31,11 +36,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException('Account is suspended');
     }
 
-    if (user.status === UserStatus.PENDING) {
+    if (user.status === UserStatus.PENDING && user.role !== UserRole.TUTOR) {
       throw new UnauthorizedException('Please verify your email first');
     }
 
     return user;
   }
 }
-

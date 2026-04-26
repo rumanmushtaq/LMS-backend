@@ -31,7 +31,7 @@ import {
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../../users/schemas/user.schema';
+import { UserRole, UserStatus } from '../../users/schemas/user.schema';
 import { GetStudentsQueryDto } from '../../users/dto/get-students.dto';
 
 @ApiExcludeController()
@@ -248,5 +248,50 @@ export class AdminController {
   async deleteStudent(@Param('id') id: string) {
     return this.adminService.deleteStudent(id);
   }
-}
 
+  // =====================
+  // TUTOR MANAGEMENT
+  // =====================
+
+  @Get('tutors')
+  @ApiOperation({ summary: 'Get all teachers with pagination and filters' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'status', enum: UserStatus, required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'sortBy', required: false })
+  @ApiQuery({ name: 'sortOrder', enum: ['asc', 'desc'], required: false })
+  getTeachers(@Query() query: GetStudentsQueryDto) {
+    return this.adminService.getTeachers(query);
+  }
+
+  @Get('tutors/:id')
+  @ApiOperation({ summary: 'Get teacher details by ID' })
+  @ApiParam({ name: 'id', description: 'Teacher ID' })
+  getTeacherById(@Param('id') id: string) {
+    return this.adminService.getTeacherById(id);
+  }
+
+  @Post('tutors/:id/approve')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Approve a tutor application' })
+  @ApiResponse({ status: 200, description: 'Tutor approved successfully' })
+  @ApiResponse({ status: 404, description: 'Tutor not found' })
+  @ApiParam({ name: 'id', description: 'Tutor ID' })
+  async approveTeacher(@Param('id') id: string) {
+    return this.adminService.approveTeacher(id);
+  }
+
+  @Post('tutors/:id/reject')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reject a tutor application' })
+  @ApiResponse({ status: 200, description: 'Tutor rejected successfully' })
+  @ApiResponse({ status: 404, description: 'Tutor not found' })
+  @ApiParam({ name: 'id', description: 'Tutor ID' })
+  async rejectTeacher(
+    @Param('id') id: string,
+    @Body('reason') reason?: string,
+  ) {
+    return this.adminService.rejectTeacher(id, reason);
+  }
+}
