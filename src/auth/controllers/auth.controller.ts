@@ -31,7 +31,9 @@ import {
   Enable2FADto,
   Verify2FADto,
   Disable2FADto,
+  CreateContactDto,
 } from '../dto';
+
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../guards/jwt-refresh.guard';
 import { Public, CurrentUser } from '../../common/decorators';
@@ -188,6 +190,15 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(resetPasswordDto);
+  }
+
+  @Public()
+  @Post('contact')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send contact form email' })
+  @ApiResponse({ status: 200, description: 'Email sent successfully' })
+  async contact(@Body() createContactDto: CreateContactDto) {
+    return this.authService.sendContactEmail(createContactDto);
   }
 
   @Public()

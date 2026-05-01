@@ -4,4 +4,4 @@ export * from './verify-email.dto';
 export * from './password.dto';
 export * from './two-factor.dto';
 export * from './refresh-token.dto';
-
+export * from './create-contact.dto';

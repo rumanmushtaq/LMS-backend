@@ -22,6 +22,10 @@ export class HeroBannerService {
     return this.heroBannerModel.find().exec();
   }
 
+  async findActive(): Promise<HeroBanner[]> {
+    return this.heroBannerModel.find().sort({ createdAt: -1 }).limit(4).exec();
+  }
+
   async findOne(id: string): Promise<HeroBanner> {
     const heroBanner = await this.heroBannerModel.findById(id).exec();
     if (!heroBanner) {

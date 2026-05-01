@@ -33,6 +33,7 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   ChangePasswordDto,
+  CreateContactDto,
 } from '../dto';
 import { JwtPayload } from '../../common/decorators/current-user.decorator';
 
@@ -728,5 +729,32 @@ export class AuthService {
 
   async getUserById(userId: string): Promise<UserDocument | null> {
     return this.userModel.findById(userId).exec();
+  }
+
+  async sendContactEmail(createContactDto: CreateContactDto): Promise<boolean> {
+    const { firstName, lastName, email, subject, message } = createContactDto;
+
+    return this.emailService.sendEmail({
+      to: 'rumanm.dev@gmail.com',
+      subject: `New Contact Form Submission: ${subject || 'No Subject'}`,
+      text: `
+        Name: ${firstName} ${lastName}
+        Email: ${email}
+        Subject: ${subject || 'N/A'}
+        Message: ${message}
+      `,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <h2 style="color: #FF4667;">New Contact Form Submission</h2>
+          <p><strong>Name:</strong> ${firstName} ${lastName}</p>
+          <p><strong>Email:</strong> ${email}</p>
+          <p><strong>Subject:</strong> ${subject || 'N/A'}</p>
+          <p><strong>Message:</strong></p>
+          <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-top: 10px;">
+            ${message.replace(/\n/g, '<br/>')}
+          </div>
+        </div>
+      `,
+    });
   }
 }

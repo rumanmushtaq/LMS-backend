@@ -60,7 +60,11 @@ export class KycOnboardingDto {
     // Step 4: Pricing
     lessonTimezone: string;
     pricePerHour: number;
-    availabilityDays: string[];
+    availability: {
+      day: string;
+      startTime: string;
+      endTime: string;
+    }[];
 
     // Step 5: Identity
     idType: string;
