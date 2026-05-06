@@ -14,6 +14,12 @@ import {
   getWelcomeEmailText,
   getTeacherVerifiedEmailHtml,
   getTeacherVerifiedEmailText,
+  getAccountDeletedEmailHtml,
+  getAccountDeletedEmailText,
+  getAccountActivatedEmailHtml,
+  getAccountActivatedEmailText,
+  getAccountSuspendedEmailHtml,
+  getAccountSuspendedEmailText,
 } from '../templates';
 
 export interface EmailOptions {
@@ -184,6 +190,59 @@ export class EmailService {
       subject: `Your teacher account is verified! - ${this.appName}`,
       html: getTeacherVerifiedEmailHtml(templateData),
       text: getTeacherVerifiedEmailText(templateData),
+    });
+  }
+
+  async sendAccountDeletedEmail(
+    email: string,
+    firstName: string,
+  ): Promise<boolean> {
+    const templateData = {
+      ...this.getBaseTemplateData(),
+      firstName,
+    };
+
+    return this.sendEmail({
+      to: email,
+      subject: `Your account has been deleted - ${this.appName}`,
+      html: getAccountDeletedEmailHtml(templateData),
+      text: getAccountDeletedEmailText(templateData),
+    });
+  }
+
+  async sendAccountActivatedEmail(
+    email: string,
+    firstName: string,
+  ): Promise<boolean> {
+    const loginUrl = `${this.frontendUrl}/login`;
+    const templateData = {
+      ...this.getBaseTemplateData(),
+      firstName,
+      loginUrl,
+    };
+
+    return this.sendEmail({
+      to: email,
+      subject: `Your account has been activated! - ${this.appName}`,
+      html: getAccountActivatedEmailHtml(templateData),
+      text: getAccountActivatedEmailText(templateData),
+    });
+  }
+
+  async sendAccountSuspendedEmail(
+    email: string,
+    firstName: string,
+  ): Promise<boolean> {
+    const templateData = {
+      ...this.getBaseTemplateData(),
+      firstName,
+    };
+
+    return this.sendEmail({
+      to: email,
+      subject: `Your account has been suspended - ${this.appName}`,
+      html: getAccountSuspendedEmailHtml(templateData),
+      text: getAccountSuspendedEmailText(templateData),
     });
   }
 }

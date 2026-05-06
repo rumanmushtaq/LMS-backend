@@ -265,6 +265,12 @@ export class AdminService {
     user.refreshTokenHash = null; // Invalidate sessions
     await user.save();
 
+    // Send email notification
+    await this.emailService.sendAccountSuspendedEmail(
+      user.email,
+      user.firstName,
+    );
+
     this.logger.log(`User suspended: ${user.email}`);
 
     return user;
@@ -275,6 +281,12 @@ export class AdminService {
 
     user.status = UserStatus.ACTIVE;
     await user.save();
+
+    // Send email notification
+    await this.emailService.sendAccountActivatedEmail(
+      user.email,
+      user.firstName,
+    );
 
     this.logger.log(`User activated: ${user.email}`);
 
@@ -289,6 +301,9 @@ export class AdminService {
         'Cannot delete admin users through this endpoint',
       );
     }
+
+    // Send email notification before deletion
+    await this.emailService.sendAccountDeletedEmail(user.email, user.firstName);
 
     await this.userModel.findByIdAndDelete(userId).exec();
 
@@ -485,6 +500,12 @@ export class AdminService {
     student.refreshTokenHash = null; // Invalidate sessions
     await student.save();
 
+    // Send email notification
+    await this.emailService.sendAccountSuspendedEmail(
+      student.email,
+      student.firstName,
+    );
+
     this.logger.log(`Student suspended: ${student.email}`);
 
     return student;
@@ -496,6 +517,12 @@ export class AdminService {
     student.status = UserStatus.ACTIVE;
     await student.save();
 
+    // Send email notification
+    await this.emailService.sendAccountActivatedEmail(
+      student.email,
+      student.firstName,
+    );
+
     this.logger.log(`Student activated: ${student.email}`);
 
     return student;
@@ -503,6 +530,12 @@ export class AdminService {
 
   async deleteStudent(studentId: string): Promise<{ message: string }> {
     const student = await this.getStudentById(studentId);
+
+    // Send email notification before deletion
+    await this.emailService.sendAccountDeletedEmail(
+      student.email,
+      student.firstName,
+    );
 
     await this.userModel.findByIdAndDelete(studentId).exec();
 

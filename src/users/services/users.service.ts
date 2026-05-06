@@ -76,6 +76,14 @@ export class UsersService {
       newKycData.bankAccount = dto.bankAccount;
       kycUpdated = true;
     }
+    if (dto.education !== undefined) {
+      newKycData.education = dto.education;
+      kycUpdated = true;
+    }
+    if (dto.experience !== undefined) {
+      newKycData.experience = dto.experience;
+      kycUpdated = true;
+    }
 
     if (kycUpdated) {
       // mongoose doesn't handle nested object updates perfectly unless we use Object.assign or markModified
