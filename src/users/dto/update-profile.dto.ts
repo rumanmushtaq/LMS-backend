@@ -91,4 +91,42 @@ export class UpdateProfileDto {
     routingNumber: string;
     accountHolderName: string;
   };
+
+  @ApiPropertyOptional({
+    description: 'Education history',
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        degree: { type: 'string' },
+        institution: { type: 'string' },
+        period: { type: 'string' },
+      },
+    },
+  })
+  @IsOptional()
+  education?: {
+    degree: string;
+    institution: string;
+    period: string;
+  }[];
+
+  @ApiPropertyOptional({
+    description: 'Work experience',
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: {
+        role: { type: 'string' },
+        company: { type: 'string' },
+        period: { type: 'string' },
+      },
+    },
+  })
+  @IsOptional()
+  experience?: {
+    role: string;
+    company: string;
+    period: string;
+  }[];
 }
