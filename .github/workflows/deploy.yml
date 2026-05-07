@@ -17,6 +17,14 @@ jobs:
           username: varona-backend
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            echo "Loading NVM environment..."
+
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+
+            nvm use 22.22.2
+
+            echo "Going to project folder..."
             cd ~/htdocs/nest.local/app/LMS-backend
 
             echo "Pulling latest code..."
