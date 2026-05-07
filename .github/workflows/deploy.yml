@@ -1,0 +1,32 @@
+name: Deploy NestJS Production
+
+on:
+  push:
+    branches:
+      - prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 72.62.162.217
+          username: varona-backend
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/htdocs/nest.local/app/LMS-backend
+
+            echo "Pulling latest code..."
+            git pull origin prod
+
+            echo "Installing dependencies..."
+            npm install
+
+            echo "Building project..."
+            npm run build
+
+            echo "Restarting PM2..."
+            pm2 restart lms-backend
