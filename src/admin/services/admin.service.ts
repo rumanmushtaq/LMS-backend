@@ -74,15 +74,34 @@ export class AdminService {
       suspendedUsers,
       recentSignups,
     ] = await Promise.all([
-      this.userModel.countDocuments(),
-      this.userModel.countDocuments({ role: UserRole.STUDENT }),
-      this.userModel.countDocuments({ role: UserRole.TUTOR }),
-      this.userModel.countDocuments({ role: UserRole.ADMIN }),
-      this.userModel.countDocuments({ status: UserStatus.ACTIVE }),
-      this.userModel.countDocuments({ status: UserStatus.PENDING }),
-      this.userModel.countDocuments({ status: UserStatus.SUSPENDED }),
+      this.userModel.countDocuments({ isDeleted: { $ne: true } }),
+      this.userModel.countDocuments({
+        role: UserRole.STUDENT,
+        isDeleted: { $ne: true },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.TUTOR,
+        isDeleted: { $ne: true },
+      }),
+      this.userModel.countDocuments({
+        role: UserRole.ADMIN,
+        isDeleted: { $ne: true },
+      }),
+      this.userModel.countDocuments({
+        status: UserStatus.ACTIVE,
+        isDeleted: { $ne: true },
+      }),
+      this.userModel.countDocuments({
+        status: UserStatus.PENDING,
+        isDeleted: { $ne: true },
+      }),
+      this.userModel.countDocuments({
+        status: UserStatus.SUSPENDED,
+        isDeleted: { $ne: true },
+      }),
       this.userModel.countDocuments({
         createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        isDeleted: { $ne: true },
       }),
     ]);
 
@@ -113,7 +132,7 @@ export class AdminService {
       sortOrder = 'desc',
     } = query;
 
-    const filter: FilterQuery<User> = {};
+    const filter: FilterQuery<User> = { isDeleted: { $ne: true } };
 
     if (role) filter.role = role;
     if (status) filter.status = status;
@@ -153,7 +172,7 @@ export class AdminService {
   async getUserById(userId: string): Promise<UserDocument> {
     const user = await this.userModel.findById(userId).exec();
 
-    if (!user) {
+    if (!user || user.isDeleted) {
       throw new NotFoundException('User not found');
     }
 
@@ -218,20 +237,44 @@ export class AdminService {
     userId: string,
     updateStatusDto: UpdateUserStatusDto,
   ): Promise<UserDocument> {
+    const { status } = updateStatusDto;
+    this.logger.log(`updateUserStatus: ID ${userId}, Target Status: ${status}`);
+
     const user = await this.getUserById(userId);
 
-    user.status = updateStatusDto.status;
+    // Set status
+    user.status = status as UserStatus;
 
     // Invalidate refresh token if suspending
-    if (updateStatusDto.status === UserStatus.SUSPENDED) {
+    if (status === 'suspended') {
       user.refreshTokenHash = null;
     }
 
     await user.save();
 
     this.logger.log(
-      `User status updated: ${user.email} -> ${updateStatusDto.status}`,
+      `updateUserStatus: DB Save Success. ${user.email} is now ${user.status} (Role: ${user.role})`,
     );
+
+    // Send email notification based on new status
+    // Using string literals for robustness in case of enum mismatch issues
+    if (status === 'active') {
+      this.logger.log(
+        `updateUserStatus: Sending activation email to ${user.email}`,
+      );
+      await this.emailService.sendAccountActivatedEmail(
+        user.email,
+        user.firstName,
+      );
+    } else if (status === 'suspended') {
+      this.logger.log(
+        `updateUserStatus: Sending suspension email to ${user.email}`,
+      );
+      await this.emailService.sendAccountSuspendedEmail(
+        user.email,
+        user.firstName,
+      );
+    }
 
     return user;
   }
@@ -305,9 +348,12 @@ export class AdminService {
     // Send email notification before deletion
     await this.emailService.sendAccountDeletedEmail(user.email, user.firstName);
 
-    await this.userModel.findByIdAndDelete(userId).exec();
+    // Perform soft delete
+    user.isDeleted = true;
+    user.deletedAt = new Date();
+    await user.save();
 
-    this.logger.log(`User deleted by admin: ${user.email}`);
+    this.logger.log(`User soft-deleted by admin: ${user.email}`);
 
     return { message: 'User deleted successfully' };
   }
@@ -368,7 +414,10 @@ export class AdminService {
     } = query;
 
     // Build filter object
-    const filters: FilterQuery<User> = { role: UserRole.STUDENT };
+    const filters: FilterQuery<User> = {
+      role: UserRole.STUDENT,
+      isDeleted: { $ne: true },
+    };
 
     // Search filter (name or email)
     if (search) {
@@ -433,7 +482,11 @@ export class AdminService {
 
   async getStudentById(studentId: string): Promise<UserDocument> {
     const student = await this.userModel
-      .findOne({ _id: studentId, role: UserRole.STUDENT })
+      .findOne({
+        _id: studentId,
+        role: UserRole.STUDENT,
+        isDeleted: { $ne: true },
+      })
       .exec();
 
     if (!student) {
@@ -562,7 +615,10 @@ export class AdminService {
     } = query;
 
     // Build filter object
-    const filters: FilterQuery<User> = { role: UserRole.TUTOR };
+    const filters: FilterQuery<User> = {
+      role: UserRole.TUTOR,
+      isDeleted: { $ne: true },
+    };
 
     // Search filter (name or email)
     if (search) {
@@ -627,7 +683,7 @@ export class AdminService {
 
   async getTeacherById(tutorId: string): Promise<UserDocument> {
     const tutor = await this.userModel
-      .findOne({ _id: tutorId, role: UserRole.TUTOR })
+      .findOne({ _id: tutorId, role: UserRole.TUTOR, isDeleted: { $ne: true } })
       .exec();
 
     if (!tutor) {
@@ -639,7 +695,7 @@ export class AdminService {
 
   async approveTeacher(tutorId: string): Promise<UserDocument> {
     const tutor = await this.userModel
-      .findOne({ _id: tutorId, role: UserRole.TUTOR })
+      .findOne({ _id: tutorId, role: UserRole.TUTOR, isDeleted: { $ne: true } })
       .exec();
 
     if (!tutor) {
@@ -662,7 +718,7 @@ export class AdminService {
 
   async rejectTeacher(tutorId: string, reason?: string): Promise<UserDocument> {
     const tutor = await this.userModel
-      .findOne({ _id: tutorId, role: UserRole.TUTOR })
+      .findOne({ _id: tutorId, role: UserRole.TUTOR, isDeleted: { $ne: true } })
       .exec();
 
     if (!tutor) {
