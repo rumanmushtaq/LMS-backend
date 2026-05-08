@@ -32,8 +32,12 @@ async function bootstrap() {
   );
 
   // CORS Configuration
+  const origins = frontendUrl
+    ? frontendUrl.split(',').map((url) => url.trim())
+    : true;
+
   app.enableCors({
-    origin: nodeEnv === 'production' ? frontendUrl : true,
+    origin: nodeEnv === 'production' ? origins : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     credentials: true,
@@ -118,16 +122,14 @@ All errors follow a consistent format:
       .setLicense('MIT', 'https://opensource.org/licenses/MIT')
       .addServer(`http://localhost:${port}`, 'Development Server')
       .addServer('https://api.varona-academy.com', 'Production Server')
-      .addBearerAuth(
-        {
-          type: 'http',
-          scheme: 'bearer',
-          bearerFormat: 'JWT',
-          name: 'Authorization',
-          description: 'Enter your JWT access token',
-          in: 'header',
-        },
-      )
+      .addBearerAuth({
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        name: 'Authorization',
+        description: 'Enter your JWT access token',
+        in: 'header',
+      })
       // .addTag('Authentication', 'User authentication and authorization endpoints')
       // .addTag('Users', 'User profile management endpoints')
       // .addTag('Admin', 'Administrative endpoints for user management')
@@ -152,7 +154,9 @@ All errors follow a consistent format:
       },
     });
 
-    logger.log(`📚 Swagger documentation available at http://localhost:${port}/api/docs`);
+    logger.log(
+      `📚 Swagger documentation available at http://localhost:${port}/api/docs`,
+    );
   }
 
   // =====================
@@ -180,4 +184,3 @@ All errors follow a consistent format:
 }
 
 bootstrap();
-
