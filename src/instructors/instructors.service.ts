@@ -92,6 +92,7 @@ export class InstructorsService {
     const filter: FilterQuery<UserDocument> = {
       role: UserRole.TUTOR,
       status: UserStatus.ACTIVE,
+      isDeleted: { $ne: true },
     };
 
     // Search by name
@@ -209,6 +210,7 @@ export class InstructorsService {
     const baseFilter: FilterQuery<UserDocument> = {
       role: UserRole.TUTOR,
       status: UserStatus.ACTIVE,
+      isDeleted: { $ne: true },
     };
 
     const [users, priceAgg] = await Promise.all([
@@ -278,6 +280,7 @@ export class InstructorsService {
         _id: id,
         role: UserRole.TUTOR,
         status: UserStatus.ACTIVE,
+        isDeleted: { $ne: true },
       })
       .select('firstName lastName email kycData createdAt')
       .lean()
@@ -337,6 +340,7 @@ export class InstructorsService {
 
     const studentFilter: FilterQuery<UserDocument> = {
       _id: { $in: studentIds },
+      isDeleted: { $ne: true },
     };
     if (search) {
       studentFilter.$or = [

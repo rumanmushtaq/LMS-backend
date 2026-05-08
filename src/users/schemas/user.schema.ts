@@ -41,6 +41,8 @@ export type UserDocument = HydratedDocument<User>;
       delete ret.passwordResetToken;
       delete ret.passwordResetTokenExpires;
       delete ret.twoFactorSecret;
+      delete ret.isDeleted;
+      delete ret.deletedAt;
       delete ret.__v;
       return ret;
     },
@@ -140,6 +142,14 @@ export class User extends Document {
   @Prop({ type: Date, default: null })
   lastLogin: Date | null;
 
+  @ApiProperty({ description: 'Whether the user is soft-deleted' })
+  @Prop({ default: false })
+  isDeleted: boolean;
+
+  @ApiProperty({ description: 'Timestamp when the user was soft-deleted' })
+  @Prop({ type: Date, default: null })
+  deletedAt: Date | null;
+
   @ApiProperty({ description: 'Account creation timestamp' })
   createdAt: Date;
 
@@ -153,6 +163,7 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });
+UserSchema.index({ isDeleted: 1 });
 UserSchema.index({ emailVerified: 1 });
 UserSchema.index({ createdAt: -1 });
 
