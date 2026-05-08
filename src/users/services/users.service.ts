@@ -16,7 +16,7 @@ export class UsersService {
   async findById(userId: string): Promise<UserDocument> {
     const user = await this.userModel.findById(userId).exec();
 
-    if (!user) {
+    if (!user || user.isDeleted) {
       throw new NotFoundException('User not found');
     }
 
@@ -24,13 +24,17 @@ export class UsersService {
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ email: email.toLowerCase() }).exec();
+    return this.userModel
+      .findOne({ email: email.toLowerCase(), isDeleted: { $ne: true } })
+      .exec();
   }
 
   async deleteAccount(user: UserDocument): Promise<{ message: string }> {
-    await this.userModel.findByIdAndDelete(user._id).exec();
+    user.isDeleted = true;
+    user.deletedAt = new Date();
+    await user.save();
 
-    this.logger.log(`Account deleted: ${user.email}`);
+    this.logger.log(`Account soft-deleted: ${user.email}`);
 
     return { message: 'Account deleted successfully' };
   }
@@ -109,7 +113,10 @@ export class UsersService {
     } = query;
 
     // Build filter object
-    const filters: FilterQuery<User> = { role: 'student' as any };
+    const filters: FilterQuery<User> = {
+      role: 'student' as any,
+      isDeleted: { $ne: true },
+    };
 
     // Search filter (name or email)
     if (search) {
@@ -172,7 +179,7 @@ export class UsersService {
 
   async getStudentById(studentId: string): Promise<UserDocument> {
     const student = await this.userModel
-      .findOne({ _id: studentId, role: 'student' })
+      .findOne({ _id: studentId, role: 'student', isDeleted: { $ne: true } })
       .exec();
 
     if (!student) {
@@ -230,14 +237,18 @@ export class UsersService {
 
   async deleteStudent(studentId: string): Promise<{ message: string }> {
     const student = await this.userModel
-      .findOneAndDelete({ _id: studentId, role: 'student' })
+      .findOne({ _id: studentId, role: 'student', isDeleted: { $ne: true } })
       .exec();
 
     if (!student) {
       throw new NotFoundException('Student not found');
     }
 
-    this.logger.log(`Student deleted: ${student.email}`);
+    student.isDeleted = true;
+    student.deletedAt = new Date();
+    await student.save();
+
+    this.logger.log(`Student soft-deleted: ${student.email}`);
     return { message: 'Student deleted successfully' };
   }
 }

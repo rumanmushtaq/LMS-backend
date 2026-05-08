@@ -257,6 +257,7 @@ export class AuthService {
       .findOne({
         email: email.toLowerCase(),
         role: { $in: [UserRole.STUDENT, UserRole.TUTOR] },
+        isDeleted: { $ne: true },
       })
       .exec();
 
@@ -312,6 +313,7 @@ export class AuthService {
       .findOne({
         email: email.toLowerCase(),
         role: UserRole.ADMIN,
+        isDeleted: { $ne: true },
       })
       .exec();
 
@@ -423,7 +425,7 @@ export class AuthService {
     const { email } = forgotPasswordDto;
 
     const user = await this.userModel
-      .findOne({ email: email.toLowerCase() })
+      .findOne({ email: email.toLowerCase(), isDeleted: { $ne: true } })
       .exec();
 
     // Always return success to prevent email enumeration
@@ -471,6 +473,7 @@ export class AuthService {
       .findOne({
         passwordResetToken: hashedToken,
         passwordResetTokenExpires: { $gt: new Date() },
+        isDeleted: { $ne: true },
       })
       .exec();
 
@@ -712,7 +715,7 @@ export class AuthService {
     password: string,
   ): Promise<UserDocument | null> {
     const user = await this.userModel
-      .findOne({ email: email.toLowerCase() })
+      .findOne({ email: email.toLowerCase(), isDeleted: { $ne: true } })
       .exec();
 
     if (!user) {
@@ -728,7 +731,8 @@ export class AuthService {
   }
 
   async getUserById(userId: string): Promise<UserDocument | null> {
-    return this.userModel.findById(userId).exec();
+    const user = await this.userModel.findById(userId).exec();
+    return user && !user.isDeleted ? user : null;
   }
 
   async sendContactEmail(createContactDto: CreateContactDto): Promise<boolean> {
