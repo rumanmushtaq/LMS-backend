@@ -31,8 +31,14 @@ export class HeroBanner extends Document {
   @Prop({ required: true, default: '1000+' })
   studentCount: string;
 
+  @Prop({ required: true, default: '50+' })
+  courseCount: string;
+
   @Prop({ required: true, default: '4.8' })
   rating: string;
+
+  @Prop({ required: false, default: 'Online' })
+  highlightedWord: string;
 }
 
 export const HeroBannerSchema = SchemaFactory.createForClass(HeroBanner);

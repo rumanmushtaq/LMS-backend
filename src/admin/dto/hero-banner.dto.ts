@@ -52,12 +52,28 @@ export class CreateHeroBannerDto {
   studentCount: string;
 
   @ApiProperty({
+    description: 'Course count shown in the banner',
+    default: '50+',
+  })
+  @IsNotEmpty()
+  @IsString()
+  courseCount: string;
+
+  @ApiProperty({
     description: 'Rating shown in the banner',
     default: '4.8',
   })
   @IsNotEmpty()
   @IsString()
   rating: string;
+
+  @ApiProperty({
+    description: 'Highlighted word for special styling',
+    default: 'Online',
+  })
+  @IsOptional()
+  @IsString()
+  highlightedWord: string;
 }
 
 export class UpdateHeroBannerDto extends PartialType(CreateHeroBannerDto) {}

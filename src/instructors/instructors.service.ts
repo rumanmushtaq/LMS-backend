@@ -104,9 +104,13 @@ export class InstructorsService {
       ];
     }
 
-    // Filter by category (stored in kycData.categories array)
+    // Filter by category (stored in kycData.categories, kycData.subjects, or kycData.category)
     if (category) {
-      filter['kycData.categories'] = { $in: [category] };
+      filter.$or = [
+        { 'kycData.categories': { $in: [category] } },
+        { 'kycData.subjects': { $in: [category] } },
+        { 'kycData.category': category },
+      ];
     }
 
     // Filter by level
@@ -171,10 +175,17 @@ export class InstructorsService {
         fullName: `${u.firstName} ${u.lastName}`,
         email: u.email,
         avatar: kc.avatar || null,
+        photoUrl: kc.photoUrl || null,
         title: kc.title || null,
         bio: kc.bio || null,
-        specialties: kc.specialties || [],
-        categories: kc.categories || [],
+        specialties: [...(kc.specialties || []), ...(kc.subjects || [])].filter(
+          (v, i, a) => v && a.indexOf(v) === i,
+        ),
+        categories: [
+          ...(kc.categories || []),
+          ...(kc.subjects || []),
+          kc.category,
+        ].filter((v, i, a) => v && a.indexOf(v) === i),
         level: kc.level || null,
         rating: kc.rating ?? 0,
         reviewCount: kc.reviewCount ?? 0,
@@ -204,7 +215,12 @@ export class InstructorsService {
   async getFilterOptions(): Promise<{
     categories: { name: string; count: number }[];
     levels: { name: string; count: number }[];
-    instructors: { _id: string; fullName: string; count: number }[];
+    instructors: {
+      _id: string;
+      fullName: string;
+      count: number;
+      photoUrl?: string;
+    }[];
     priceRange: { min: number; max: number };
   }> {
     const baseFilter: FilterQuery<UserDocument> = {
@@ -240,13 +256,25 @@ export class InstructorsService {
 
     const categoryMap = new Map<string, number>();
     const levelMap = new Map<string, number>();
-    const instructorList: { _id: string; fullName: string; count: number }[] =
-      [];
+    const instructorList: {
+      _id: string;
+      fullName: string;
+      count: number;
+      photoUrl?: string;
+    }[] = [];
 
     for (const u of users) {
       const kc = (u.kycData as Record<string, any>) || {};
-      const cats: string[] = kc.categories || [];
-      cats.forEach((c) => categoryMap.set(c, (categoryMap.get(c) ?? 0) + 1));
+      // Collect from categories (array), subjects (array), and category (string)
+      const cats: string[] = [...(kc.categories || []), ...(kc.subjects || [])];
+      if (kc.category) {
+        cats.push(kc.category);
+      }
+      // De-duplicate
+      const uniqueCats = [...new Set(cats)];
+      uniqueCats.forEach((c) =>
+        categoryMap.set(c, (categoryMap.get(c) ?? 0) + 1),
+      );
       if (kc.level) {
         levelMap.set(kc.level, (levelMap.get(kc.level) ?? 0) + 1);
       }
@@ -254,6 +282,7 @@ export class InstructorsService {
         _id: String(u._id),
         fullName: `${u.firstName} ${u.lastName}`,
         count: kc.lessonCount ?? 0,
+        photoUrl: kc.photoUrl,
       });
     }
 
