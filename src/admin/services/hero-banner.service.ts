@@ -23,7 +23,7 @@ export class HeroBannerService {
   }
 
   async findActive(): Promise<HeroBanner[]> {
-    return this.heroBannerModel.find().sort({ createdAt: -1 }).limit(4).exec();
+    return this.heroBannerModel.find({ isActive: true }).sort({ createdAt: -1 }).limit(3).exec();
   }
 
   async findOne(id: string): Promise<HeroBanner> {
