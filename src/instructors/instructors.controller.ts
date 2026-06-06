@@ -85,14 +85,14 @@ export class InstructorsController {
   }
 
   @Public()
-  @Get(':id')
-  @ApiParam({ name: 'id', description: 'Instructor (tutor) MongoDB ObjectId' })
+  @Get(':slugOrId')
+  @ApiParam({ name: 'slugOrId', description: 'Instructor (tutor) MongoDB ObjectId or unique slug' })
   @ApiOperation({
-    summary: 'Get instructor detail by ID',
+    summary: 'Get instructor detail by ID or Slug',
     description:
       'Returns full profile: bio, education, experience, certifications, social links and contact info.',
   })
-  async getInstructorById(@Param('id', ParseObjectIdPipe) id: string) {
-    return this.instructorsService.getInstructorById(id);
+  async getInstructorBySlugOrId(@Param('slugOrId') slugOrId: string) {
+    return this.instructorsService.getInstructorBySlugOrId(slugOrId);
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery, SortOrder } from 'mongoose';
+import { Model, FilterQuery, SortOrder, Types } from 'mongoose';
 import {
   User,
   UserDocument,
@@ -61,6 +61,7 @@ export interface InstructorDetailData extends InstructorProfileData {
   phone: string | null;
   address: string | null;
   courses?: any[];
+  slug?: string;
 }
 
 @Injectable()
@@ -164,7 +165,7 @@ export class InstructorsService {
         .sort(sortOption)
         .skip(skip)
         .limit(limit)
-        .select('firstName lastName email kycData createdAt')
+        .select('firstName lastName email slug kycData createdAt')
         .lean()
         .exec(),
       this.userModel.countDocuments(filter).exec(),
@@ -174,6 +175,7 @@ export class InstructorsService {
       const kc = (u.kycData as Record<string, any>) || {};
       return {
         _id: String(u._id),
+        slug: (u as any).slug || String(u._id),
         firstName: u.firstName,
         lastName: u.lastName,
         fullName: `${u.firstName} ${u.lastName}`,
@@ -307,20 +309,27 @@ export class InstructorsService {
     };
   }
 
-  async getInstructorById(id: string): Promise<InstructorDetailData> {
+  async getInstructorBySlugOrId(slugOrId: string): Promise<InstructorDetailData> {
+    const query: any = {
+      role: UserRole.TUTOR,
+      status: UserStatus.ACTIVE,
+      isDeleted: { $ne: true },
+    };
+
+    if (Types.ObjectId.isValid(slugOrId)) {
+      query.$or = [{ _id: slugOrId }, { slug: slugOrId }];
+    } else {
+      query.slug = slugOrId;
+    }
+
     const user = await this.userModel
-      .findOne({
-        _id: id,
-        role: UserRole.TUTOR,
-        status: UserStatus.ACTIVE,
-        isDeleted: { $ne: true },
-      })
-      .select('firstName lastName email kycData createdAt')
+      .findOne(query)
+      .select('firstName lastName email slug kycData createdAt')
       .lean()
       .exec();
 
     if (!user) {
-      throw new NotFoundException(`Instructor with id "${id}" not found.`);
+      throw new NotFoundException(`Instructor with identifier "${slugOrId}" not found.`);
     }
 
     const kc = (user.kycData as Record<string, any>) || {};
@@ -375,6 +384,7 @@ export class InstructorsService {
 
     return {
       _id: String(user._id),
+      slug: (user as any).slug || String(user._id),
       firstName: user.firstName,
       lastName: user.lastName,
       fullName: `${user.firstName} ${user.lastName}`,

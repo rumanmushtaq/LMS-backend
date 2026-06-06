@@ -61,6 +61,10 @@ export class User extends Document {
   @Prop({ required: true, trim: true })
   lastName: string;
 
+  @ApiProperty({ description: 'URL slug for the user profile', required: false })
+  @Prop({ type: String, unique: true, sparse: true })
+  slug: string;
+
   @Prop({ required: true })
   password: string;
 
@@ -171,3 +175,29 @@ UserSchema.index({ createdAt: -1 });
 UserSchema.virtual('fullName').get(function (this: User) {
   return `${this.firstName} ${this.lastName}`;
 });
+
+// Pre-save hook to generate unique slug for tutors
+UserSchema.pre('save', async function (next) {
+  if (this.isModified('firstName') || this.isModified('lastName') || this.isNew) {
+    if (this.role === UserRole.TUTOR) {
+      const baseSlug = `${this.firstName}-${this.lastName}`
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '');
+      
+      let newSlug = baseSlug;
+      let counter = 1;
+      
+      // Check for uniqueness
+      const UserModel = this.constructor as any;
+      while (await UserModel.findOne({ slug: newSlug, _id: { $ne: this._id } })) {
+        newSlug = `${baseSlug}-${counter}`;
+        counter++;
+      }
+      
+      this.slug = newSlug;
+    }
+  }
+  next();
+});
+
