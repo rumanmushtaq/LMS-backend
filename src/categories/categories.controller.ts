@@ -24,6 +24,7 @@ import { CreateCategoryDto, UpdateCategoryDto } from './dto/category.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 
 @ApiTags('Categories')
@@ -45,12 +46,14 @@ export class CategoriesController {
     return this.categoriesService.create(dto, file);
   }
 
+  @Public()
   @Get()
   @ApiOperation({ summary: 'Get all categories' })
   findAll() {
     return this.categoriesService.findAll();
   }
 
+  @Public()
   @Get(':id')
   @ApiOperation({ summary: 'Get category by ID' })
   findOne(@Param('id') id: string) {
