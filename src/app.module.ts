@@ -36,6 +36,8 @@ import { CoursesModule } from './courses/courses.module';
 import { OrdersModule } from './orders/orders.module';
 import { ShopModule } from './shop/shop.module';
 import { CategoriesModule } from './categories/categories.module';
+import { ChatModule } from './chat/chat.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -81,6 +83,8 @@ import { CategoriesModule } from './categories/categories.module';
     OrdersModule,
     ShopModule,
     CategoriesModule,
+    ChatModule,
+    NotificationsModule,
   ],
   providers: [
     // Global JWT Auth Guard
