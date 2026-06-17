@@ -37,7 +37,7 @@ jobs:
             git pull origin prod
 
             echo "Installing dependencies..."
-            npm install
+            npm install --legacy-peer-deps
 
             echo "Building project..."
             npm run build && echo "✅ Build succeeded"
