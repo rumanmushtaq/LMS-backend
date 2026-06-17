@@ -45,5 +45,11 @@ jobs:
             echo "Restarting PM2..."
             pm2 restart lms-backend
 
+            echo "Waiting for app to start..."
+            sleep 5
+
             echo "✅ Deploy complete. PM2 status:"
             pm2 list
+
+            echo "📋 PM2 logs (last 50 lines):"
+            pm2 logs lms-backend --lines 50 --nostream
