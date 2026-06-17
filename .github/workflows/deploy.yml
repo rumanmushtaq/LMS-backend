@@ -17,6 +17,8 @@ jobs:
           username: varona-backend
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -e
+
             echo "Loading NVM environment..."
 
             export NVM_DIR="$HOME/.nvm"
@@ -34,7 +36,10 @@ jobs:
             npm install
 
             echo "Building project..."
-            npm run build
+            npm run build && echo "✅ Build succeeded"
 
             echo "Restarting PM2..."
             pm2 restart lms-backend
+
+            echo "✅ Deploy complete. PM2 status:"
+            pm2 list
