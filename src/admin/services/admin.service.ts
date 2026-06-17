@@ -306,6 +306,12 @@ export class AdminService {
 
     user.status = UserStatus.SUSPENDED;
     user.refreshTokenHash = null; // Invalidate sessions
+
+    // Revoke email-verified flag for tutors on suspension
+    if (user.role === UserRole.TUTOR) {
+      user.emailVerified = false;
+    }
+
     await user.save();
 
     // Send email notification
@@ -703,6 +709,7 @@ export class AdminService {
     }
 
     tutor.status = UserStatus.ACTIVE;
+    tutor.emailVerified = true;
     await tutor.save();
 
     // Send verification email
@@ -711,7 +718,7 @@ export class AdminService {
       tutor.firstName,
     );
 
-    this.logger.log(`Tutor verified by admin: ${tutor.email}`);
+    this.logger.log(`Tutor approved & emailVerified set to true: ${tutor.email}`);
 
     return tutor;
   }
@@ -726,11 +733,12 @@ export class AdminService {
     }
 
     tutor.status = UserStatus.SUSPENDED;
-    // We could store the reason in a separate field or log it
+    tutor.emailVerified = false;
+    tutor.refreshTokenHash = null; // Invalidate any active sessions
     await tutor.save();
 
     this.logger.log(
-      `Tutor rejected by admin: ${tutor.email}. Reason: ${reason || 'No reason provided'}`,
+      `Tutor rejected & emailVerified set to false: ${tutor.email}. Reason: ${reason || 'No reason provided'}`,
     );
 
     return tutor;

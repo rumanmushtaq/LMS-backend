@@ -46,3 +46,8 @@ export const imagekitConfig = registerAs('imagekit', () => ({
   privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
   urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
 }));
+
+export const stripeConfig = registerAs('stripe', () => ({
+  secretKey: process.env.STRIPE_SECRET_KEY,
+  publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+}));

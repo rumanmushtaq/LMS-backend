@@ -90,6 +90,14 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   IMAGEKIT_URL_ENDPOINT: string = 'https://ik.imagekit.io/fake_endpoint';
+
+  @IsString()
+  @IsOptional()
+  STRIPE_SECRET_KEY: string;
+
+  @IsString()
+  @IsOptional()
+  STRIPE_PUBLISHABLE_KEY: string;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

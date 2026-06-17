@@ -12,6 +12,7 @@ import {
   throttleConfig,
   securityConfig,
   imagekitConfig,
+  stripeConfig,
   validateEnv,
 } from './config';
 
@@ -33,6 +34,10 @@ import { InstructorsModule } from './instructors/instructors.module';
 import { CertificatesModule } from './certificates/certificates.module';
 import { CoursesModule } from './courses/courses.module';
 import { OrdersModule } from './orders/orders.module';
+import { ShopModule } from './shop/shop.module';
+import { CategoriesModule } from './categories/categories.module';
+import { ChatModule } from './chat/chat.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -47,6 +52,7 @@ import { OrdersModule } from './orders/orders.module';
         throttleConfig,
         securityConfig,
         imagekitConfig,
+        stripeConfig,
       ],
       validate: validateEnv,
       envFilePath: ['.env.local', '.env'],
@@ -75,6 +81,10 @@ import { OrdersModule } from './orders/orders.module';
     CertificatesModule,
     CoursesModule,
     OrdersModule,
+    ShopModule,
+    CategoriesModule,
+    ChatModule,
+    NotificationsModule,
   ],
   providers: [
     // Global JWT Auth Guard
