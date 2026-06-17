@@ -29,6 +29,10 @@ jobs:
             echo "Going to project folder..."
             cd ~/htdocs/nest.local/app/LMS-backend
 
+            echo "Resetting any local server changes..."
+            git reset --hard
+            git clean -fd
+
             echo "Pulling latest code..."
             git pull origin prod
 
