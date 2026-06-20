@@ -5,6 +5,7 @@ import {
   IsString,
   IsObject,
   IsArray,
+  IsOptional,
 } from 'class-validator';
 
 export class ContractOnboardingDto {
@@ -23,6 +24,11 @@ export class TaxFormOnboardingDto {
   @IsString()
   @IsNotEmpty()
   taxFormUrl: string;
+
+  @ApiProperty({ description: 'Is the teacher from US?' })
+  @IsBoolean()
+  @IsOptional()
+  isUSPerson?: boolean;
 }
 
 export class KycOnboardingDto {

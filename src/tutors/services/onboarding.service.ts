@@ -45,12 +45,19 @@ export class OnboardingService {
       throw new BadRequestException('Please complete the contract step first.');
     }
 
+    const updateData: any = {
+      taxFormUrl: dto.taxFormUrl,
+      onboardingStep: OnboardingStep.TAX_SUBMITTED,
+    };
+
+    if (dto.isUSPerson !== undefined) {
+      updateData.isUSPerson = dto.isUSPerson;
+      updateData.taxFormType = dto.isUSPerson ? TaxFormType.W9 : TaxFormType.W8BEN;
+    }
+
     const updatedUser = await this.userModel.findByIdAndUpdate(
       user._id,
-      {
-        taxFormUrl: dto.taxFormUrl,
-        onboardingStep: OnboardingStep.TAX_SUBMITTED,
-      },
+      updateData,
       { new: true },
     );
     return updatedUser;
