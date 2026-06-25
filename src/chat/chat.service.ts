@@ -39,10 +39,9 @@ export class ChatService {
     return message;
   }
 
-  async getConversations(userId: string): Promise<any[]> {
-    const objectId = new Types.ObjectId(userId);
+  async getConversations(userId: string, skip = 0, limit = 50): Promise<any[]> {
     const conversations = await this.conversationModel
-      .find({ participants: objectId })
+      .find({ participants: new Types.ObjectId(userId) })
       .populate('participants', 'firstName lastName email role')
       .exec();
     
@@ -61,11 +60,13 @@ export class ChatService {
     );
     
     // Sort by last message date
-    return result.sort((a: any, b: any) => {
+    const sortedResult = result.sort((a: any, b: any) => {
       const aDate = a.lastMessage?.createdAt || a.createdAt;
       const bDate = b.lastMessage?.createdAt || b.createdAt;
       return new Date(bDate).getTime() - new Date(aDate).getTime();
     });
+
+    return sortedResult.slice(skip, skip + limit);
   }
 
   async getMessages(conversationId: string, skip = 0, limit = 50): Promise<MessageDocument[]> {
@@ -92,6 +93,30 @@ export class ChatService {
 
     message.isFlagged = true;
     message.flagReason = reason;
+    return message.save();
+  }
+
+  // --- Admin Methods ---
+
+
+
+  async getFlaggedMessages(skip = 0, limit = 50): Promise<any[]> {
+    return this.messageModel
+      .find({ isFlagged: true })
+      .populate('senderId', 'firstName lastName email role')
+      .populate('conversationId')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+  }
+
+  async resolveFlagMessage(messageId: string): Promise<MessageDocument> {
+    const message = await this.messageModel.findById(messageId);
+    if (!message) throw new NotFoundException('Message not found');
+
+    message.isFlagged = false;
+    message.flagReason = null;
     return message.save();
   }
 }

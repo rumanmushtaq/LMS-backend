@@ -53,6 +53,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.userId = userId;
       client.join(`user_${userId}`); // Join a personal room for direct events
 
+      // Broadcast online status to all clients
+      this.server.emit('userStatusUpdate', { userId, online: true });
+
       this.logger.log(`Client connected: ${client.id} (User: ${userId})`);
     } catch (e) {
       this.logger.error(`Connection error: ${e.message}`);
@@ -71,6 +74,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         }
         if (sockets.length === 0) {
           this.connectedUsers.delete(userId);
+          // Broadcast offline status to all clients
+          this.server.emit('userStatusUpdate', { userId, online: false });
         }
       }
     }
@@ -136,6 +141,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const senderId = client.data.userId;
     client.to(`conversation_${conversationId}`).emit('userStoppedTyping', { conversationId, userId: senderId });
+  }
+
+  @SubscribeMessage('checkStatus')
+  handleCheckStatus(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() userId: string,
+  ) {
+    const isOnline = this.connectedUsers.has(userId) && (this.connectedUsers.get(userId)?.length ?? 0) > 0;
+    client.emit('statusResponse', { userId, online: isOnline });
   }
 
   private extractTokenFromHeader(client: Socket): string | undefined {

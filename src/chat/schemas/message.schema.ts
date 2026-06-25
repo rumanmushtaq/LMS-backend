@@ -2,17 +2,19 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, HydratedDocument, Types } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 
+import * as mongoose from 'mongoose';
+
 export type MessageDocument = HydratedDocument<Message>;
 
 @Schema({ timestamps: true })
 export class Message extends Document {
   @ApiProperty({ description: 'The conversation this message belongs to' })
-  @Prop({ type: Types.ObjectId, ref: 'Conversation', required: true })
-  conversationId: Types.ObjectId;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true })
+  conversationId: mongoose.Types.ObjectId;
 
   @ApiProperty({ description: 'The sender of the message' })
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-  senderId: Types.ObjectId;
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true })
+  senderId: mongoose.Types.ObjectId;
 
   @ApiProperty({ description: 'The content of the message' })
   @Prop({ type: String, required: true })

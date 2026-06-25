@@ -33,6 +33,7 @@ export type UserDocument = HydratedDocument<User>;
 @Schema({
   timestamps: true,
   toJSON: {
+    virtuals: true,
     transform: (_doc: unknown, ret: Record<string, unknown>) => {
       delete ret.password;
       delete ret.refreshTokenHash;
@@ -47,6 +48,7 @@ export type UserDocument = HydratedDocument<User>;
       return ret;
     },
   },
+  toObject: { virtuals: true }
 })
 export class User extends Document {
   @ApiProperty({ description: 'User email address' })
