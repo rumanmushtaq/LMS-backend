@@ -91,6 +91,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { event: 'joined', data: conversationId };
   }
 
+  // ─── Public helpers for other modules (e.g. live classes) ────────────────────
+
+  /** Emit an event to everyone currently in a conversation/Q&A room. */
+  emitToConversation(conversationId: string, event: string, payload: any) {
+    this.server.to(`conversation_${conversationId}`).emit(event, payload);
+  }
+
+  /** Emit an event directly to a set of users' personal rooms. */
+  emitToUsers(userIds: Array<string | { toString(): string }>, event: string, payload: any) {
+    for (const id of userIds) {
+      this.server.to(`user_${id.toString()}`).emit(event, payload);
+    }
+  }
+
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
@@ -102,14 +116,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Save to database
     const message = await this.chatService.saveMessage(conversationId, senderId, content);
 
-    // Broadcast to everyone in the conversation room
+    // Broadcast to everyone in the conversation room for typing indicator logic reliability
     this.server.to(`conversation_${conversationId}`).emit('newMessage', message);
     
-    // Notify all participants except sender
+    // Notify all participants (including sender, for multi-device sync) directly in their personal rooms
     const conversation = await this.chatService.getConversationById(conversationId);
     if (conversation && conversation.participants) {
       for (const participant of conversation.participants) {
         const participantId = participant.toString();
+        
+        // Guarantee delivery by sending it to the user's dedicated socket room
+        this.server.to(`user_${participantId}`).emit('newMessage', message);
+
         if (participantId !== senderId) {
           this.server.to(`user_${participantId}`).emit('newNotification', {
             type: 'chat_message',

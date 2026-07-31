@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Req, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { Request } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
@@ -63,6 +63,19 @@ export class ChatController {
   async blockConversation(@Param('id') conversationId: string, @Req() req: Request & { user: any }) {
     const userId = req?.user?._id || req?.user?.userId;
     return this.chatService.blockConversation(conversationId, userId);
+  }
+
+  @ApiOperation({ summary: 'Unblock a conversation' })
+  @Post('conversations/:id/unblock')
+  async unblockConversation(@Param('id') conversationId: string, @Req() req: Request & { user: any }) {
+    const userId = req?.user?._id || req?.user?.userId;
+    return this.chatService.unblockConversation(conversationId, userId);
+  }
+
+  @ApiOperation({ summary: 'Delete a conversation' })
+  @Delete('conversations/:id')
+  async deleteConversation(@Param('id') conversationId: string) {
+    return this.chatService.deleteConversation(conversationId);
   }
 
   // --- Admin Endpoints ---

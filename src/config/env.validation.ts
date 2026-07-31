@@ -98,6 +98,16 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   STRIPE_PUBLISHABLE_KEY: string;
+
+  // Vimeo Live — optional so the app still boots without it; live-class
+  // endpoints will fail clearly at call time if the token is missing.
+  @IsString()
+  @IsOptional()
+  VIMEO_ACCESS_TOKEN: string;
+
+  @IsString()
+  @IsOptional()
+  VIMEO_API_VERSION: string = '3.4';
 }
 
 export function validateEnv(config: Record<string, unknown>) {

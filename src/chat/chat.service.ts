@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Conversation, ConversationDocument } from './schemas/conversation.schema';
@@ -28,6 +28,21 @@ export class ChatService {
 
   async getConversationById(conversationId: string): Promise<ConversationDocument | null> {
     return this.conversationModel.findById(new Types.ObjectId(conversationId)).exec();
+  }
+
+  /** Create a fresh (possibly group) conversation — used for class Q&A rooms. */
+  async createConversation(participants: string[]): Promise<ConversationDocument> {
+    return this.conversationModel.create({
+      participants: participants.map((p) => new Types.ObjectId(p)),
+    });
+  }
+
+  /** Add a user to a conversation if not already a participant (idempotent). */
+  async addParticipant(conversationId: string, userId: string): Promise<void> {
+    await this.conversationModel.updateOne(
+      { _id: new Types.ObjectId(conversationId) },
+      { $addToSet: { participants: new Types.ObjectId(userId) } },
+    );
   }
 
   async saveMessage(conversationId: string, senderId: string, content: string): Promise<MessageDocument> {
@@ -85,6 +100,24 @@ export class ChatService {
     conversation.isBlocked = true;
     conversation.blockedBy = new Types.ObjectId(userId);
     return conversation.save();
+  }
+
+  async unblockConversation(conversationId: string, userId: string): Promise<ConversationDocument> {
+    const conversation = await this.conversationModel.findById(conversationId);
+    if (!conversation) throw new NotFoundException('Conversation not found');
+
+    if (conversation.blockedBy?.toString() !== userId.toString()) {
+      throw new ForbiddenException('You did not block this conversation');
+    }
+
+    conversation.isBlocked = false;
+    conversation.blockedBy = null;
+    return conversation.save();
+  }
+
+  async deleteConversation(conversationId: string): Promise<void> {
+    await this.messageModel.deleteMany({ conversationId: new Types.ObjectId(conversationId) });
+    await this.conversationModel.findByIdAndDelete(conversationId);
   }
 
   async flagMessage(messageId: string, reason: string): Promise<MessageDocument> {
