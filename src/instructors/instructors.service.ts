@@ -61,6 +61,7 @@ export interface InstructorDetailData extends InstructorProfileData {
   phone: string | null;
   address: string | null;
   courses?: any[];
+  availability?: Array<{ day: string; startTime: string; endTime: string }>;
 }
 
 @Injectable()
@@ -406,6 +407,7 @@ export class InstructorsService {
       phone: kc.phone || "+1(452) 125-6789",
       address: kc.address || "877 Ferry Street, Huntsville, Alabama",
       courses: courseList,
+      availability: kc.availability || [],
     };
   }
 

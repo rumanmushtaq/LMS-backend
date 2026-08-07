@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import * as express from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -11,7 +12,13 @@ async function bootstrap() {
   // Create NestJS application
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+    // Increase body size limit to accommodate 100MB file uploads
+    bodyParser: false,
   });
+
+  // Apply body parsers with a 110MB limit (multer handles multipart itself)
+  app.use(express.json({ limit: '110mb' }));
+  app.use(express.urlencoded({ limit: '110mb', extended: true }));
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port') || 3000;

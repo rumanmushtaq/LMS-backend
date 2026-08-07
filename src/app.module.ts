@@ -13,6 +13,7 @@ import {
   securityConfig,
   imagekitConfig,
   stripeConfig,
+  vimeoConfig,
   validateEnv,
 } from './config';
 
@@ -38,6 +39,8 @@ import { ShopModule } from './shop/shop.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ChatModule } from './chat/chat.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { TutorMaterialsModule } from './tutor-materials/tutor-materials.module';
+import { ClassesModule } from './classes/classes.module';
 
 @Module({
   imports: [
@@ -53,6 +56,7 @@ import { NotificationsModule } from './notifications/notifications.module';
         securityConfig,
         imagekitConfig,
         stripeConfig,
+        vimeoConfig,
       ],
       validate: validateEnv,
       envFilePath: ['.env.local', '.env'],
@@ -85,6 +89,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     CategoriesModule,
     ChatModule,
     NotificationsModule,
+    TutorMaterialsModule,
+    ClassesModule,
   ],
   providers: [
     // Global JWT Auth Guard

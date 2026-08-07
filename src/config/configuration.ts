@@ -51,3 +51,11 @@ export const stripeConfig = registerAs('stripe', () => ({
   secretKey: process.env.STRIPE_SECRET_KEY,
   publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
 }));
+
+export const vimeoConfig = registerAs('vimeo', () => ({
+  // Personal access token from a Vimeo app with `create`/`edit`/`video_files`
+  // scopes on a paid plan that has live streaming enabled.
+  accessToken: process.env.VIMEO_ACCESS_TOKEN,
+  // API version pinned for stable field shapes.
+  apiVersion: process.env.VIMEO_API_VERSION || '3.4',
+}));
