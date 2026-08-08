@@ -19,6 +19,40 @@ export const jwtConfig = registerAs('jwt', () => ({
   refreshExpiration: process.env.JWT_REFRESH_EXPIRATION || '7d',
 }));
 
+/**
+ * Sliding-session policy. Every duration lives here so the timeout is one
+ * configurable value rather than a literal repeated across guards and services.
+ */
+export const sessionConfig = registerAs('session', () => ({
+  /**
+   * Idle window. No meaningful activity for this long ends the session, and no
+   * refresh token can revive it. Kept in step with `jwt.accessExpiration` so an
+   * access token never outlives the idle window it was issued under.
+   */
+  idleTimeoutMs: parseInt(process.env.SESSION_IDLE_TIMEOUT_MS || '900000', 10),
+
+  /**
+   * Hard ceiling regardless of how active the user is. Continuous activity must
+   * not keep one login alive forever. Defaults to 7 days, matching the previous
+   * refresh-token lifetime so existing behaviour is not silently shortened.
+   */
+  absoluteLifetimeMs: parseInt(
+    process.env.SESSION_ABSOLUTE_LIFETIME_MS || '604800000',
+    10,
+  ),
+
+  /**
+   * Write-coalescing window for `lastActivityAt`. Persisting on every request
+   * would add a database write per API call for no security gain; the idle
+   * window is 15 minutes, so resolution finer than this is wasted. Lowering it
+   * costs writes, raising it makes a session expire up to this much early.
+   */
+  activityWriteIntervalMs: parseInt(
+    process.env.SESSION_ACTIVITY_WRITE_INTERVAL_MS || '60000',
+    10,
+  ),
+}));
+
 export const emailConfig = registerAs('email', () => ({
   smtpHost: process.env.SMTP_HOST || 'smtp.gmail.com',
   smtpPort: parseInt(process.env.SMTP_PORT || '587', 10),
@@ -39,6 +73,31 @@ export const throttleConfig = registerAs('throttle', () => ({
 export const securityConfig = registerAs('security', () => ({
   bcryptSaltRounds: parseInt(process.env.BCRYPT_SALT_ROUNDS || '12', 10),
   twoFaAppName: process.env.TWO_FA_APP_NAME || 'VaronaAcademy',
+
+  // ── IP blocking ──────────────────────────────────────────────────────────
+  // Ships in shadow mode: blocks are computed and counted but nothing is
+  // refused until SECURITY_ENFORCE=true. Flip it only after reviewing the
+  // shadow "blocked" counters against real traffic.
+  enforceIpBlocks: process.env.SECURITY_ENFORCE === 'true',
+  // Only enable once Cloudflare fronts the API AND the origin firewall
+  // admits Cloudflare's IP ranges exclusively — otherwise the header is
+  // client-controlled and the whole system can be evaded or poisoned.
+  trustCloudflare: process.env.SECURITY_TRUST_CLOUDFLARE === 'true',
+  // Distinct accounts failing from one IP (IPv6: one /64) inside the window.
+  // High on purpose: carrier-grade NAT puts thousands of users on one IPv4.
+  failedLoginThreshold: parseInt(
+    process.env.SECURITY_FAILED_LOGIN_THRESHOLD || '30',
+    10,
+  ),
+  failedLoginWindowMinutes: parseInt(
+    process.env.SECURITY_FAILED_LOGIN_WINDOW_MIN || '10',
+    10,
+  ),
+  // First auto-block duration; repeat offenses escalate 1× → 4× → 24×.
+  autoBlockBaseMinutes: parseInt(
+    process.env.SECURITY_AUTOBLOCK_BASE_MINUTES || '15',
+    10,
+  ),
 }));
 
 export const imagekitConfig = registerAs('imagekit', () => ({

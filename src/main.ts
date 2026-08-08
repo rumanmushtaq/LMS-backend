@@ -20,6 +20,11 @@ async function bootstrap() {
   app.use(express.json({ limit: '110mb' }));
   app.use(express.urlencoded({ limit: '110mb', extended: true }));
 
+  // One hop we own (the VPS reverse proxy). Without this, req.ip is the
+  // proxy's address for every request — the throttler rate-limits all users
+  // as one client, and IP blocking would block the proxy, i.e. everyone.
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   const configService = app.get(ConfigService);
   const port = configService.get<number>('app.port') || 3000;
   const appName = configService.get<string>('app.name') || 'Varona Academy';

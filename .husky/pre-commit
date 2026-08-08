@@ -1,1 +1,8 @@
+# Types are checked, then the build is produced — but in one step here.
+#
+# Unlike the Next apps, `nest build` *is* tsc: it type-checks and emits in the
+# same pass and fails the commit on any type error. Running `npm run typecheck`
+# first would compile the project twice (~34s + ~37s) for no extra safety.
+#
+# `npm run typecheck` exists for a fast types-only check without emitting.
 npm run build

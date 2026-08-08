@@ -23,7 +23,6 @@ import { EmailService } from '../../email/services/email.service';
 import {
   generateSecureToken,
   hashToken,
-  verifyToken,
   generateOTP,
 } from '../../common/utils/crypto.util';
 import {
@@ -36,10 +35,20 @@ import {
   CreateContactDto,
 } from '../dto';
 import { JwtPayload } from '../../common/decorators/current-user.decorator';
+import { SessionService } from './session.service';
+import { SessionDocument } from '../schemas/session.schema';
+import { AutoBlockService } from '../../security/services/auto-block.service';
+import { IpActivityService } from '../../security/services/ip-activity.service';
 
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+}
+
+/** Login metadata recorded on the session for audit purposes. */
+export interface SessionContext {
+  userAgent?: string | null;
+  ipAddress?: string | null;
 }
 
 export interface LoginResponse {
@@ -63,6 +72,9 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly sessionService: SessionService,
+    private readonly autoBlockService: AutoBlockService,
+    private readonly ipActivityService: IpActivityService,
   ) {
     this.bcryptSaltRounds = this.configService.get<number>(
       'security.bcryptSaltRounds',
@@ -122,9 +134,7 @@ export class AuthService {
       this.logger.log(
         `Tutor detected, generating tokens and returning immediate response for ${email}`,
       );
-      const tokens = await this.generateTokens(user);
-      user.refreshTokenHash = hashToken(tokens.refreshToken);
-      await user.save();
+      const { tokens } = await this.startSession(user);
 
       const response = {
         message: 'Registration successful. Proceed to onboarding.',
@@ -183,14 +193,13 @@ export class AuthService {
     user.emailVerificationToken = null;
     user.emailVerificationTokenExpires = null;
 
-    // Generate tokens for immediate onboarding if tutor
-    let tokens = null;
-    if (user.role === UserRole.TUTOR) {
-      tokens = await this.generateTokens(user);
-      user.refreshTokenHash = hashToken(tokens.refreshToken);
-    }
-
     await user.save();
+
+    // Generate tokens for immediate onboarding if tutor
+    let tokens: TokenPair | null = null;
+    if (user.role === UserRole.TUTOR) {
+      tokens = (await this.startSession(user)).tokens;
+    }
 
     this.logger.log(`Email verified for user: ${user.email}`);
 
@@ -250,7 +259,10 @@ export class AuthService {
   // LOGIN
   // =====================
 
-  async login(loginDto: LoginDto): Promise<LoginResponse> {
+  async login(
+    loginDto: LoginDto,
+    context?: SessionContext,
+  ): Promise<LoginResponse> {
     const { email, password } = loginDto;
 
     const user = await this.userModel
@@ -262,12 +274,20 @@ export class AuthService {
       .exec();
 
     if (!user) {
+      this.autoBlockService.recordFailedLogin(
+        context?.ipAddress ?? undefined,
+        email,
+      );
       throw new UnauthorizedException('Invalid credentials');
     }
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
+      this.autoBlockService.recordFailedLogin(
+        context?.ipAddress ?? undefined,
+        email,
+      );
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -293,20 +313,25 @@ export class AuthService {
       return this.initiate2FALogin(user);
     }
 
-    // Generate tokens
-    const tokens = await this.generateTokens(user);
+    // Open a server-side session and issue tokens bound to it
+    const { tokens } = await this.startSession(user, context);
 
-    // Update refresh token hash and last login
-    user.refreshTokenHash = hashToken(tokens.refreshToken);
     user.lastLogin = new Date();
     await user.save();
+
+    if (context?.ipAddress) {
+      this.ipActivityService.recordUser(context.ipAddress, String(user._id));
+    }
 
     this.logger.log(`User logged in: ${user.email}`);
 
     return { user, tokens };
   }
 
-  async adminLogin(loginDto: AdminLoginDto): Promise<LoginResponse> {
+  async adminLogin(
+    loginDto: AdminLoginDto,
+    context?: SessionContext,
+  ): Promise<LoginResponse> {
     const { email, password } = loginDto;
 
     const user = await this.userModel
@@ -318,12 +343,20 @@ export class AuthService {
       .exec();
 
     if (!user) {
+      this.autoBlockService.recordFailedLogin(
+        context?.ipAddress ?? undefined,
+        email,
+      );
       throw new UnauthorizedException('Invalid admin credentials');
     }
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
+      this.autoBlockService.recordFailedLogin(
+        context?.ipAddress ?? undefined,
+        email,
+      );
       throw new UnauthorizedException('Invalid admin credentials');
     }
 
@@ -337,13 +370,15 @@ export class AuthService {
       return this.initiate2FALogin(user);
     }
 
-    // Generate tokens
-    const tokens = await this.generateTokens(user);
+    // Open a server-side session and issue tokens bound to it
+    const { tokens } = await this.startSession(user, context);
 
-    // Update refresh token hash and last login
-    user.refreshTokenHash = hashToken(tokens.refreshToken);
     user.lastLogin = new Date();
     await user.save();
+
+    if (context?.ipAddress) {
+      this.ipActivityService.recordUser(context.ipAddress, String(user._id));
+    }
 
     this.logger.log(`Admin logged in: ${user.email}`);
 
@@ -354,11 +389,23 @@ export class AuthService {
   // TOKEN MANAGEMENT
   // =====================
 
-  private async generateTokens(user: UserDocument): Promise<TokenPair> {
+  /**
+   * Signs a token pair bound to a specific session.
+   *
+   * The access token's `expiresIn` is always taken from configuration; it is
+   * never adjusted after the fact. Sliding expiry works by issuing a *new*
+   * token here, because a JWT's `exp` claim is covered by the signature and
+   * cannot be edited without forging the token.
+   */
+  private async generateTokens(
+    user: UserDocument,
+    sessionId: string,
+  ): Promise<TokenPair> {
     const payload: JwtPayload = {
       sub: user._id.toString(),
       email: user.email,
       role: user.role,
+      sid: sessionId,
     };
 
     const [accessToken, refreshToken] = await Promise.all([
@@ -375,40 +422,70 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  /**
+   * Opens a new server-side session and issues the token pair bound to it.
+   *
+   * Every path that logs a user in funnels through here, so no route can
+   * accidentally mint tokens that outlive session control.
+   */
+  private async startSession(
+    user: UserDocument,
+    context?: SessionContext,
+  ): Promise<{ tokens: TokenPair; session: SessionDocument }> {
+    const session = await this.sessionService.createSession(user._id, context);
+    const tokens = await this.generateTokens(user, session._id.toString());
+    await this.sessionService.attachRefreshToken(
+      session._id,
+      tokens.refreshToken,
+    );
+
+    return { tokens, session };
+  }
+
+  /**
+   * Exchanges a refresh token for a new pair, subject to the idle timeout.
+   *
+   * The session is validated *before* anything is issued, so a refresh token
+   * can never revive a session the user has abandoned. `rotateRefreshToken`
+   * checks revocation, absolute lifetime and idleness in that order, detects
+   * replay of an already-rotated token, and only then records the refresh as
+   * activity.
+   */
   async refreshTokens(
     user: UserDocument,
     oldRefreshToken: string,
+    sessionId: string,
   ): Promise<TokenPair> {
-    // Verify the old refresh token matches
-    if (!user.refreshTokenHash) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+    let accessToken!: string;
 
-    const isValid = verifyToken(oldRefreshToken, user.refreshTokenHash);
-    if (!isValid) {
-      // Potential token theft - invalidate all sessions
-      user.refreshTokenHash = null;
-      await user.save();
-      throw new UnauthorizedException(
-        'Invalid refresh token - session invalidated',
-      );
-    }
-
-    // Generate new token pair (rotation)
-    const tokens = await this.generateTokens(user);
-
-    // Update refresh token hash
-    user.refreshTokenHash = hashToken(tokens.refreshToken);
-    await user.save();
+    const { refreshToken } = await this.sessionService.rotateRefreshToken(
+      sessionId,
+      oldRefreshToken,
+      async () => {
+        const tokens = await this.generateTokens(user, sessionId);
+        accessToken = tokens.accessToken;
+        return tokens.refreshToken;
+      },
+    );
 
     this.logger.log(`Tokens refreshed for user: ${user.email}`);
 
-    return tokens;
+    return { accessToken, refreshToken };
   }
 
-  async logout(user: UserDocument): Promise<{ message: string }> {
-    user.refreshTokenHash = null;
-    await user.save();
+  /**
+   * Ends one session — the device that asked, not every device the user owns.
+   *
+   * Revoking server-side is what makes the refresh token unusable afterwards;
+   * clearing client storage alone would leave a working credential in the wild.
+   */
+  async logout(
+    user: UserDocument,
+    sessionId?: string,
+  ): Promise<{ message: string }> {
+    if (sessionId) {
+      await this.sessionService.revoke(sessionId, 'logout');
+    }
 
     this.logger.log(`User logged out: ${user.email}`);
 
@@ -491,8 +568,12 @@ export class AuthService {
     user.password = hashedPassword;
     user.passwordResetToken = null;
     user.passwordResetTokenExpires = null;
-    user.refreshTokenHash = null; // Invalidate all sessions
+    user.refreshTokenHash = null; // Clears any pre-session legacy credential
     await user.save();
+
+    // Every device is signed out — a password reset is the standard response to
+    // a suspected compromise, so existing sessions must not survive it.
+    await this.sessionService.revokeAllForUser(user._id, 'password_change');
 
     this.logger.log(`Password reset completed for: ${user.email}`);
 
@@ -524,8 +605,11 @@ export class AuthService {
     );
 
     user.password = hashedPassword;
-    user.refreshTokenHash = null; // Invalidate all sessions for security
+    user.refreshTokenHash = null; // Clears any pre-session legacy credential
     await user.save();
+
+    // Same reasoning as a reset: change the password, drop every session.
+    await this.sessionService.revokeAllForUser(user._id, 'password_change');
 
     this.logger.log(`Password changed for: ${user.email}`);
 
@@ -652,7 +736,11 @@ export class AuthService {
     };
   }
 
-  async verify2FA(sessionToken: string, code: string): Promise<LoginResponse> {
+  async verify2FA(
+    sessionToken: string,
+    code: string,
+    context?: SessionContext,
+  ): Promise<LoginResponse> {
     const session = this.twoFactorSessions.get(sessionToken);
 
     if (!session) {
@@ -690,14 +778,12 @@ export class AuthService {
       throw new UnauthorizedException('Invalid verification code');
     }
 
-    // Clean up session
+    // Clean up the temporary 2FA challenge
     this.twoFactorSessions.delete(sessionToken);
 
-    // Generate tokens
-    const tokens = await this.generateTokens(user);
+    // Open a server-side session and issue tokens bound to it
+    const { tokens } = await this.startSession(user, context);
 
-    // Update refresh token hash and last login
-    user.refreshTokenHash = hashToken(tokens.refreshToken);
     user.lastLogin = new Date();
     await user.save();
 
