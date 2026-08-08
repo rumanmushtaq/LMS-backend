@@ -24,7 +24,6 @@ export interface ExperienceItem {
 }
 
 export interface SocialLinks {
-  facebook?: string;
   instagram?: string;
   twitter?: string;
   youtube?: string;
@@ -38,6 +37,7 @@ export interface InstructorProfileData {
   fullName: string;
   email: string;
   avatar: string | null;
+  photoUrl?: string | null;
   title: string | null;
   bio: string | null;
   specialties: string[];
@@ -381,6 +381,7 @@ export class InstructorsService {
       fullName: `${user.firstName} ${user.lastName}`,
       email: user.email,
       avatar: kc.avatar || null,
+      photoUrl: kc.photoUrl || null,
       title: kc.title || null,
       bio: kc.bio || null,
       aboutMe: kc.aboutMe || kc.bio || defaultAboutMe,
@@ -398,7 +399,6 @@ export class InstructorsService {
       experience: kc.experience && kc.experience.length > 0 ? kc.experience : defaultExperience,
       certifications: kc.certifications && kc.certifications.length > 0 ? kc.certifications : defaultCertifications,
       social: {
-        facebook: kc.social?.facebook || "https://facebook.com",
         instagram: kc.social?.instagram || "https://instagram.com",
         twitter: kc.social?.twitter || "https://twitter.com",
         youtube: kc.social?.youtube || "https://youtube.com",

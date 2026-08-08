@@ -35,3 +35,5 @@ export class Message extends Document {
 
 export const MessageSchema = SchemaFactory.createForClass(Message);
 MessageSchema.index({ conversationId: 1, createdAt: 1 });
+// Backs the per-conversation unread tally on the conversations list.
+MessageSchema.index({ conversationId: 1, isRead: 1, senderId: 1 });

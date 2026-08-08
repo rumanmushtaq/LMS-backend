@@ -27,7 +27,114 @@ export class ChatService {
   }
 
   async getConversationById(conversationId: string): Promise<ConversationDocument | null> {
+    if (!Types.ObjectId.isValid(conversationId)) return null;
     return this.conversationModel.findById(new Types.ObjectId(conversationId)).exec();
+  }
+
+  /**
+   * Loads a conversation and proves the caller is in it.
+   *
+   * Every entry point that takes a conversation id from the client must go
+   * through here — knowing an id is not permission to read, write or delete
+   * the thread it belongs to.
+   */
+  /**
+   * Every conversation in the system, for the admin moderation view.
+   *
+   * The admin screen used to call the participant-scoped list endpoint, so
+   * "All Chats" only ever showed conversations the admin was personally in.
+   */
+  async getAllConversationsForModeration(skip = 0, limit = 50): Promise<any[]> {
+    const conversations = await this.conversationModel
+      .find()
+      .populate('participants', 'firstName lastName email role')
+      .lean()
+      .exec();
+
+    if (conversations.length === 0) return [];
+
+    const conversationIds = conversations.map((c) => c._id);
+    const lastMessages = await this.messageModel.aggregate([
+      { $match: { conversationId: { $in: conversationIds } } },
+      { $sort: { createdAt: -1, _id: -1 } },
+      { $group: { _id: '$conversationId', lastMessage: { $first: '$$ROOT' } } },
+    ]);
+    const lastByConversation = new Map<string, any>(
+      lastMessages.map((r) => [r._id.toString(), r.lastMessage]),
+    );
+
+    return conversations
+      .map((conv) => ({
+        ...conv,
+        lastMessage: lastByConversation.get(conv._id.toString()) ?? null,
+      }))
+      .sort((a: any, b: any) => {
+        const aDate = a.lastMessage?.createdAt || a.createdAt;
+        const bDate = b.lastMessage?.createdAt || b.createdAt;
+        return new Date(bDate).getTime() - new Date(aDate).getTime();
+      })
+      .slice(skip, skip + limit);
+  }
+
+  async assertParticipant(
+    conversationId: string,
+    userId: string,
+  ): Promise<ConversationDocument> {
+    const conversation = await this.getConversationById(conversationId);
+    if (!conversation) {
+      throw new NotFoundException('Conversation not found');
+    }
+
+    const isParticipant = conversation.participants.some(
+      (p) => p.toString() === userId?.toString(),
+    );
+    if (!isParticipant) {
+      // Same shape as "not found" would be safer against id probing, but a
+      // distinct 403 is far easier to debug and the ids are not guessable.
+      throw new ForbiddenException('You are not a participant in this conversation');
+    }
+
+    return conversation;
+  }
+
+  /**
+   * Display name for a participant, used to label the chat a notification
+   * opens. Falls back to an empty string rather than throwing — a missing
+   * name must never stop a message being delivered.
+   */
+  async getParticipantName(conversationId: string, userId: string): Promise<string> {
+    const conversation = await this.conversationModel
+      .findById(conversationId)
+      .populate<{ participants: Array<{ _id: Types.ObjectId; firstName?: string; lastName?: string }> }>(
+        'participants',
+        'firstName lastName',
+      )
+      .lean()
+      .exec();
+
+    const participant = conversation?.participants?.find(
+      (p) => p?._id?.toString() === userId?.toString(),
+    );
+    if (!participant) return '';
+
+    return [participant.firstName, participant.lastName].filter(Boolean).join(' ').trim();
+  }
+
+  /** Proves the caller may act on a message, via the conversation it belongs to. */
+  async assertMessageParticipant(
+    messageId: string,
+    userId: string,
+  ): Promise<MessageDocument> {
+    if (!Types.ObjectId.isValid(messageId)) {
+      throw new NotFoundException('Message not found');
+    }
+    const message = await this.messageModel.findById(messageId);
+    if (!message) {
+      throw new NotFoundException('Message not found');
+    }
+
+    await this.assertParticipant(message.conversationId.toString(), userId);
+    return message;
   }
 
   /** Create a fresh (possibly group) conversation — used for class Q&A rooms. */
@@ -55,39 +162,93 @@ export class ChatService {
   }
 
   async getConversations(userId: string, skip = 0, limit = 50): Promise<any[]> {
+    const viewerId = new Types.ObjectId(userId);
+
     const conversations = await this.conversationModel
-      .find({ participants: new Types.ObjectId(userId) })
+      .find({ participants: viewerId })
       .populate('participants', 'firstName lastName email role')
+      .lean()
       .exec();
-    
-    // For each conversation, we can optionally get the last message.
-    const result = await Promise.all(
-      conversations.map(async (conv) => {
-        const lastMessage = await this.messageModel
-          .findOne({ conversationId: conv._id })
-          .sort({ createdAt: -1 })
-          .exec();
-        return {
-          ...conv.toObject(),
-          lastMessage,
-        };
-      })
+
+    if (conversations.length === 0) return [];
+
+    const conversationIds = conversations.map((c) => c._id);
+
+    // Last message and unread tally for every conversation in two aggregations
+    // rather than a query per conversation.
+    const [lastMessages, unreadCounts] = await Promise.all([
+      this.messageModel.aggregate([
+        { $match: { conversationId: { $in: conversationIds } } },
+        { $sort: { createdAt: -1, _id: -1 } },
+        { $group: { _id: '$conversationId', lastMessage: { $first: '$$ROOT' } } },
+      ]),
+      this.messageModel.aggregate([
+        {
+          $match: {
+            conversationId: { $in: conversationIds },
+            // Your own messages are never "unread" to you.
+            senderId: { $ne: viewerId },
+            isRead: false,
+          },
+        },
+        { $group: { _id: '$conversationId', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const lastByConversation = new Map<string, any>(
+      lastMessages.map((r) => [r._id.toString(), r.lastMessage]),
     );
-    
-    // Sort by last message date
-    const sortedResult = result.sort((a: any, b: any) => {
+    const unreadByConversation = new Map<string, number>(
+      unreadCounts.map((r) => [r._id.toString(), r.count]),
+    );
+
+    const result = conversations.map((conv) => {
+      const key = conv._id.toString();
+      return {
+        ...conv,
+        lastMessage: lastByConversation.get(key) ?? null,
+        unreadCount: unreadByConversation.get(key) ?? 0,
+      };
+    });
+
+    // Most recently active first.
+    result.sort((a: any, b: any) => {
       const aDate = a.lastMessage?.createdAt || a.createdAt;
       const bDate = b.lastMessage?.createdAt || b.createdAt;
       return new Date(bDate).getTime() - new Date(aDate).getTime();
     });
 
-    return sortedResult.slice(skip, skip + limit);
+    return result.slice(skip, skip + limit);
+  }
+
+  /**
+   * Marks everything the *other* participants sent as read.
+   *
+   * Nothing set `isRead` before this existed, so the unread badges and the
+   * delivered/read ticks in the UI had no data behind them.
+   */
+  async markConversationRead(
+    conversationId: string,
+    userId: string,
+  ): Promise<{ conversationId: string; updated: number }> {
+    const result = await this.messageModel.updateMany(
+      {
+        conversationId: new Types.ObjectId(conversationId),
+        senderId: { $ne: new Types.ObjectId(userId) },
+        isRead: false,
+      },
+      { $set: { isRead: true } },
+    );
+
+    return { conversationId, updated: result.modifiedCount };
   }
 
   async getMessages(conversationId: string, skip = 0, limit = 50): Promise<MessageDocument[]> {
     return this.messageModel
       .find({ conversationId: new Types.ObjectId(conversationId) })
-      .sort({ createdAt: 1 })
+      // _id breaks ties: two messages saved in the same millisecond would
+      // otherwise come back in an arbitrary order.
+      .sort({ createdAt: 1, _id: 1 })
       .skip(skip)
       .limit(limit)
       .exec();
