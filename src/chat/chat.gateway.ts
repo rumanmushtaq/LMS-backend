@@ -10,9 +10,13 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { ChatService } from './chat.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Logger } from '@nestjs/common';
+import { resolveClientIp } from '../common/utils';
+import { IpBlockService } from '../security/services/ip-block.service';
+import { IpActivityService } from '../security/services/ip-activity.service';
 
 @WebSocketGateway({
   cors: {
@@ -37,10 +41,37 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
     private readonly notificationsService: NotificationsService,
+    private readonly configService: ConfigService,
+    private readonly ipBlockService: IpBlockService,
+    private readonly ipActivityService: IpActivityService,
   ) {}
 
   async handleConnection(client: Socket) {
     try {
+      // HTTP middleware never sees WebSocket upgrades, so the blocklist has
+      // to be consulted here too — same resolver, same trust rules.
+      const ip = resolveClientIp(
+        {
+          headers: client.handshake.headers,
+          remoteAddress: client.handshake.address,
+        },
+        {
+          trustCloudflare: this.configService.get<boolean>(
+            'security.trustCloudflare',
+            false,
+          ),
+        },
+      );
+      if (ip && this.ipBlockService.findBlock(ip)) {
+        this.ipActivityService.recordBlocked(ip);
+        if (this.configService.get<boolean>('security.enforceIpBlocks', false)) {
+          this.logger.warn(`Refused socket from blocked IP ${ip}`);
+          client.disconnect();
+          return;
+        }
+        this.logger.warn(`[shadow] would refuse socket from blocked IP ${ip}`);
+      }
+
       const token = this.extractTokenFromHeader(client);
       if (!token) {
         client.disconnect();

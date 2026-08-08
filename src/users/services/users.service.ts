@@ -89,6 +89,39 @@ export class UsersService {
       kycUpdated = true;
     }
 
+    // Tutor profile fields. These are rendered on the profile and instructor
+    // pages but had no way to be set after onboarding.
+    const passthrough = [
+      'title',
+      'address',
+      'country',
+      'timezone',
+      'category',
+      'level',
+      'specialties',
+      'spokenLanguages',
+      'nativeLanguage',
+      'certifications',
+      'availability',
+      'social',
+    ] as const;
+
+    for (const key of passthrough) {
+      if (dto[key] !== undefined) {
+        newKycData[key] = dto[key];
+        kycUpdated = true;
+      }
+    }
+
+    if (dto.pricePerHour !== undefined) {
+      // Onboarding writes `pricePerHour`, but the public instructor list and
+      // its price filter read `hourlyRate`. Writing both keeps the two views
+      // agreeing until the duplication is cleaned up.
+      newKycData.pricePerHour = dto.pricePerHour;
+      newKycData.hourlyRate = dto.pricePerHour;
+      kycUpdated = true;
+    }
+
     if (kycUpdated) {
       // mongoose doesn't handle nested object updates perfectly unless we use Object.assign or markModified
       user.kycData = newKycData;

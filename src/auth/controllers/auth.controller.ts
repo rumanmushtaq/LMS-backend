@@ -7,9 +7,10 @@ import {
   UseGuards,
   Get,
   Query,
+  Req,
   Res,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -38,6 +39,29 @@ import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { JwtRefreshGuard } from '../guards/jwt-refresh.guard';
 import { Public, CurrentUser } from '../../common/decorators';
 import { UserDocument } from '../../users/schemas/user.schema';
+import { SessionContext } from '../services/auth.service';
+import { RefreshContext } from '../strategies/jwt-refresh.strategy';
+import { SessionDocument } from '../schemas/session.schema';
+
+/** The request once JwtStrategy has attached the validated session. */
+type AuthenticatedRequest = Request & { session?: SessionDocument };
+
+/**
+ * Captures who/where a session was opened from, for audit and for showing users
+ * their active sessions. Never used to make an authorization decision — the
+ * user-agent is client-controlled, and the IP identifies a network, not a
+ * person. The IP does feed the credential-stuffing auto-blocker, which is why
+ * it prefers clientIp: the value resolved once by IpSecurityMiddleware under
+ * the proxy/Cloudflare trust rules, so blocking and detection agree on what
+ * "this client's address" means.
+ */
+function sessionContextFrom(req: Request): SessionContext {
+  return {
+    userAgent: req.get('user-agent') ?? null,
+    ipAddress:
+      (req as Request & { clientIp?: string }).clientIp ?? req.ip ?? null,
+  };
+}
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -64,8 +88,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Login for students and tutors' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  async login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  async login(@Body() loginDto: LoginDto, @Req() req: Request) {
+    return this.authService.login(loginDto, sessionContextFrom(req));
   }
 
   @Public()
@@ -74,8 +98,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Login for administrators' })
   @ApiResponse({ status: 200, description: 'Admin login successful' })
   @ApiResponse({ status: 401, description: 'Invalid admin credentials' })
-  async adminLogin(@Body() loginDto: AdminLoginDto) {
-    return this.authService.adminLogin(loginDto);
+  async adminLogin(@Body() loginDto: AdminLoginDto, @Req() req: Request) {
+    return this.authService.adminLogin(loginDto, sessionContextFrom(req));
   }
 
   @Public()
@@ -226,10 +250,12 @@ export class AuthController {
   @ApiBody({ type: RefreshTokenDto })
   @ApiResponse({ status: 200, description: 'Tokens refreshed successfully' })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  async refreshTokens(
-    @CurrentUser() data: { user: UserDocument; refreshToken: string },
-  ) {
-    return this.authService.refreshTokens(data.user, data.refreshToken);
+  async refreshTokens(@CurrentUser() data: RefreshContext) {
+    return this.authService.refreshTokens(
+      data.user,
+      data.refreshToken,
+      data.sessionId,
+    );
   }
 
   // =====================

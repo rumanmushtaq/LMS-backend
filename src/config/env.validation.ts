@@ -41,6 +41,24 @@ export class EnvironmentVariables {
   @IsOptional()
   JWT_REFRESH_EXPIRATION: string = '7d';
 
+  /** Idle window in ms before a session expires. Default 15 minutes. */
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  SESSION_IDLE_TIMEOUT_MS: number = 900000;
+
+  /** Absolute session ceiling in ms, regardless of activity. Default 7 days. */
+  @IsNumber()
+  @Min(1)
+  @IsOptional()
+  SESSION_ABSOLUTE_LIFETIME_MS: number = 604800000;
+
+  /** How often `lastActivityAt` is actually persisted. Default 60 seconds. */
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  SESSION_ACTIVITY_WRITE_INTERVAL_MS: number = 60000;
+
   @IsString()
   @IsOptional()
   SMTP_HOST: string = 'smtp.gmail.com';
@@ -108,6 +126,31 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   VIMEO_API_VERSION: string = '3.4';
+
+  // IP security — see securityConfig in configuration.ts for semantics.
+  @IsString()
+  @IsOptional()
+  SECURITY_ENFORCE: string = 'false';
+
+  @IsString()
+  @IsOptional()
+  SECURITY_TRUST_CLOUDFLARE: string = 'false';
+
+  @IsNumber()
+  @IsOptional()
+  SECURITY_FAILED_LOGIN_THRESHOLD: number = 30;
+
+  @IsNumber()
+  @IsOptional()
+  SECURITY_FAILED_LOGIN_WINDOW_MIN: number = 10;
+
+  @IsNumber()
+  @IsOptional()
+  SECURITY_AUTOBLOCK_BASE_MINUTES: number = 15;
+
+  @IsNumber()
+  @IsOptional()
+  SECURITY_ACTIVITY_RETENTION_DAYS: number = 90;
 }
 
 export function validateEnv(config: Record<string, unknown>) {

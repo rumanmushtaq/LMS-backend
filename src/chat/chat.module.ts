@@ -7,6 +7,7 @@ import { Conversation, ConversationSchema } from './schemas/conversation.schema'
 import { Message, MessageSchema } from './schemas/message.schema';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { SecurityModule } from '../security/security.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ]),
     AuthModule,
     NotificationsModule,
+    SecurityModule,
   ],
   controllers: [ChatController],
   providers: [ChatGateway, ChatService],

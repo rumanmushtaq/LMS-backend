@@ -100,22 +100,28 @@ export class InstructorsService {
       isDeleted: { $ne: true },
     };
 
+    // Each filter below is an independent "any of these" group. They are
+    // collected and combined with $and at the end — assigning them all to
+    // filter.$or meant the last one silently replaced the others, so
+    // searching within a category ignored the search term entirely.
+    const anyOfGroups: FilterQuery<UserDocument>[][] = [];
+
     // Search by name
     if (search) {
-      filter.$or = [
+      anyOfGroups.push([
         { firstName: { $regex: search, $options: 'i' } },
         { lastName: { $regex: search, $options: 'i' } },
         { 'kycData.title': { $regex: search, $options: 'i' } },
-      ];
+      ]);
     }
 
     // Filter by category (stored in kycData.categories, kycData.subjects, or kycData.category)
     if (category) {
-      filter.$or = [
+      anyOfGroups.push([
         { 'kycData.categories': { $in: [category] } },
         { 'kycData.subjects': { $in: [category] } },
         { 'kycData.category': category },
-      ];
+      ]);
     }
 
     // Filter by level
@@ -130,13 +136,22 @@ export class InstructorsService {
 
     // Filter by hourly rate range
     if (priceMin !== undefined || priceMax !== undefined) {
-      filter['kycData.hourlyRate'] = {};
-      if (priceMin !== undefined) {
-        filter['kycData.hourlyRate'].$gte = priceMin;
-      }
-      if (priceMax !== undefined) {
-        filter['kycData.hourlyRate'].$lte = priceMax;
-      }
+      const range: Record<string, number> = {};
+      if (priceMin !== undefined) range.$gte = priceMin;
+      if (priceMax !== undefined) range.$lte = priceMax;
+
+      // Match whichever key the record happens to use, otherwise every tutor
+      // onboarded through the KYC flow is filtered out.
+      anyOfGroups.push([
+        { 'kycData.hourlyRate': range },
+        { 'kycData.pricePerHour': range },
+      ]);
+    }
+
+    if (anyOfGroups.length === 1) {
+      filter.$or = anyOfGroups[0];
+    } else if (anyOfGroups.length > 1) {
+      filter.$and = anyOfGroups.map((group) => ({ $or: group }));
     }
 
     // Build sort
@@ -197,7 +212,9 @@ export class InstructorsService {
         lessonCount: kc.lessonCount ?? 0,
         totalDurationMinutes: kc.totalDurationMinutes ?? 0,
         studentCount: kc.studentCount ?? 0,
-        hourlyRate: kc.hourlyRate ?? null,
+        // Onboarding stores `pricePerHour`; older/seeded records use
+        // `hourlyRate`. Read both so every tutor's rate actually shows.
+        hourlyRate: kc.hourlyRate ?? kc.pricePerHour ?? null,
         createdAt: u.createdAt,
       };
     });
@@ -393,7 +410,7 @@ export class InstructorsService {
       lessonCount: kc.lessonCount ?? 0,
       totalDurationMinutes: kc.totalDurationMinutes ?? 0,
       studentCount: kc.studentCount ?? 0,
-      hourlyRate: kc.hourlyRate ?? null,
+      hourlyRate: kc.hourlyRate ?? kc.pricePerHour ?? null,
       createdAt: user.createdAt,
       education: kc.education && kc.education.length > 0 ? kc.education : defaultEducation,
       experience: kc.experience && kc.experience.length > 0 ? kc.experience : defaultExperience,

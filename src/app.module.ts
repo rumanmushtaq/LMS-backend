@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -8,6 +8,7 @@ import {
   appConfig,
   databaseConfig,
   jwtConfig,
+  sessionConfig,
   emailConfig,
   throttleConfig,
   securityConfig,
@@ -29,6 +30,7 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { SessionActivityInterceptor } from './auth/interceptors/session-activity.interceptor';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TutorsModule } from './tutors/tutors.module';
 import { InstructorsModule } from './instructors/instructors.module';
@@ -41,6 +43,8 @@ import { ChatModule } from './chat/chat.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TutorMaterialsModule } from './tutor-materials/tutor-materials.module';
 import { ClassesModule } from './classes/classes.module';
+import { SecurityModule } from './security/security.module';
+import { IpSecurityMiddleware } from './security/middleware/ip-security.middleware';
 
 @Module({
   imports: [
@@ -51,6 +55,7 @@ import { ClassesModule } from './classes/classes.module';
         appConfig,
         databaseConfig,
         jwtConfig,
+        sessionConfig,
         emailConfig,
         throttleConfig,
         securityConfig,
@@ -91,6 +96,7 @@ import { ClassesModule } from './classes/classes.module';
     NotificationsModule,
     TutorMaterialsModule,
     ClassesModule,
+    SecurityModule,
   ],
   providers: [
     // Global JWT Auth Guard
@@ -113,6 +119,13 @@ import { ClassesModule } from './classes/classes.module';
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
     },
+    // Slides the session idle window on meaningful authenticated activity.
+    // Registered globally so no route can forget to extend the session, and
+    // runs after the auth guard so the session is already validated.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: SessionActivityInterceptor,
+    },
     // Global Logging Interceptor
     {
       provide: APP_INTERCEPTOR,
@@ -125,4 +138,9 @@ import { ClassesModule } from './classes/classes.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Every route, before guards: a blocked IP must cost nothing downstream.
+    consumer.apply(IpSecurityMiddleware).forRoutes('*');
+  }
+}
