@@ -103,6 +103,24 @@ export class ClassSession extends Document {
   @Prop({ type: String, default: null })
   declineReason: string | null;
 
+  // ── Cancellation audit ─────────────────────────────────────────────────
+  // Cancelled classes are KEPT, not deleted: the record is what lets the
+  // platform count repeat tutor cancellations per student (3-strike rule)
+  // and lets admins see who cancelled what and why.
+  @ApiProperty({ description: 'Reason the class was cancelled' })
+  @Prop({ type: String, default: null })
+  cancelReason: string | null;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  cancelledBy: Types.ObjectId | null;
+
+  @ApiProperty({ description: "Role of whoever cancelled: 'tutor' or 'admin'" })
+  @Prop({ type: String, enum: ['tutor', 'admin', null], default: null })
+  cancelledByRole: 'tutor' | 'admin' | null;
+
+  @Prop({ type: Date, default: null })
+  cancelledAt: Date | null;
+
   @ApiProperty({ description: 'Vimeo live-broadcast metadata for this class' })
   @Prop({ type: LiveSessionSchema, default: () => ({}) })
   liveSession: LiveSession;

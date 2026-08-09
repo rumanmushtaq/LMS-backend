@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Quer
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ClassesService } from '../services/classes.service';
 import { CreateClassDto, RequestClassDto, ApproveClassDto, DeclineClassDto } from '../dto/create-class.dto';
-import { UpdateClassDto } from '../dto/update-class.dto';
+import { CancelClassDto, UpdateClassDto } from '../dto/update-class.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -97,9 +97,27 @@ export class ClassesController {
     return this.classesService.update(id, updateClassDto, req.user._id.toString(), isAdmin);
   }
 
+  @Patch(':id/cancel')
+  @Roles(UserRole.TUTOR, UserRole.ADMIN)
+  @ApiOperation({
+    summary:
+      'Cancel a class (Tutor/Admin) — keeps the record, notifies students, enforces the tutor 3-strike rule',
+  })
+  cancel(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: CancelClassDto,
+  ) {
+    return this.classesService.cancel(
+      id,
+      { userId: req.user._id.toString(), role: req.user.role },
+      dto.reason,
+    );
+  }
+
   @Delete(':id')
   @Roles(UserRole.TUTOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Delete/Cancel a class (Tutor/Admin)' })
+  @ApiOperation({ summary: 'Hard-delete a class (Tutor/Admin) — prefer PATCH :id/cancel' })
   remove(@Req() req: any, @Param('id') id: string) {
     const isAdmin = req.user.role === UserRole.ADMIN;
     return this.classesService.remove(id, req.user._id.toString(), isAdmin);
