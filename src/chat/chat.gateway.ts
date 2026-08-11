@@ -2,6 +2,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
+  OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
   ConnectedSocket,
@@ -23,7 +24,9 @@ import { IpActivityService } from '../security/services/ip-activity.service';
     origin: '*',
   },
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway
+  implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
   
@@ -46,60 +49,91 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly ipActivityService: IpActivityService,
   ) {}
 
-  async handleConnection(client: Socket) {
-    try {
-      // HTTP middleware never sees WebSocket upgrades, so the blocklist has
-      // to be consulted here too — same resolver, same trust rules.
-      const ip = resolveClientIp(
-        {
-          headers: client.handshake.headers,
-          remoteAddress: client.handshake.address,
-        },
-        {
-          trustCloudflare: this.configService.get<boolean>(
-            'security.trustCloudflare',
-            false,
-          ),
-        },
-      );
-      if (ip && this.ipBlockService.findBlock(ip)) {
-        this.ipActivityService.recordBlocked(ip);
-        if (this.configService.get<boolean>('security.enforceIpBlocks', false)) {
-          this.logger.warn(`Refused socket from blocked IP ${ip}`);
-          client.disconnect();
-          return;
+  /**
+   * Authentication runs as a handshake middleware, not inside
+   * handleConnection, for one specific reason: rejecting here delivers a
+   * `connect_error` to the client carrying the reason string, which is the
+   * only signal socket.io-client's `connect_error` handler can act on.
+   *
+   * The web client listens for `jwt expired` there and silently refreshes
+   * its token, so an expired access token becomes a seamless reconnect
+   * instead of a dead socket. Rejecting later (client.disconnect() inside
+   * handleConnection) fires only a plain `disconnect`, which the client
+   * cannot tell apart from a network drop — so the refresh never happened
+   * and the connection just died.
+   *
+   * A 15-minute access token lapsing is routine, so it is logged at debug,
+   * not error — that ERROR-level noise was the reported symptom.
+   */
+  afterInit(server: Server) {
+    server.use((client: Socket, next: (err?: Error) => void) => {
+      try {
+        // HTTP middleware never sees WebSocket upgrades, so the blocklist has
+        // to be consulted here too — same resolver, same trust rules.
+        const ip = resolveClientIp(
+          {
+            headers: client.handshake.headers,
+            remoteAddress: client.handshake.address,
+          },
+          {
+            trustCloudflare: this.configService.get<boolean>(
+              'security.trustCloudflare',
+              false,
+            ),
+          },
+        );
+        if (ip && this.ipBlockService.findBlock(ip)) {
+          this.ipActivityService.recordBlocked(ip);
+          if (
+            this.configService.get<boolean>('security.enforceIpBlocks', false)
+          ) {
+            this.logger.warn(`Refused socket from blocked IP ${ip}`);
+            return next(new Error('Access restricted'));
+          }
+          this.logger.warn(`[shadow] would refuse socket from blocked IP ${ip}`);
         }
-        this.logger.warn(`[shadow] would refuse socket from blocked IP ${ip}`);
+
+        const token = this.extractTokenFromHeader(client);
+        if (!token) {
+          return next(new Error('Unauthorized'));
+        }
+
+        const payload = this.jwtService.verify(token);
+        // Resolved once here; handleConnection and every handler trust it.
+        client.data.userId = payload.sub || payload.userId;
+        return next();
+      } catch (e) {
+        // Expired tokens are expected and recoverable — the client refreshes
+        // and reconnects on this exact message. Keep it out of the error log.
+        if (e?.name === 'TokenExpiredError') {
+          this.logger.debug(`Socket auth: jwt expired (${client.id})`);
+          return next(new Error('jwt expired'));
+        }
+        this.logger.warn(`Socket auth rejected: ${e?.message}`);
+        return next(new Error('Unauthorized'));
       }
+    });
+  }
 
-      const token = this.extractTokenFromHeader(client);
-      if (!token) {
-        client.disconnect();
-        return;
-      }
-
-      const payload = this.jwtService.verify(token);
-      const userId = payload.sub || payload.userId; // Depending on how your JWT is structured
-
-      // Add to connected users
-      let sockets = this.connectedUsers.get(userId);
-      if (!sockets) {
-        sockets = [];
-        this.connectedUsers.set(userId, sockets);
-      }
-      sockets.push(client.id);
-
-      client.data.userId = userId;
-      client.join(`user_${userId}`); // Join a personal room for direct events
-
-      // Broadcast online status to all clients
-      this.server.emit('userStatusUpdate', { userId, online: true });
-
-      this.logger.log(`Client connected: ${client.id} (User: ${userId})`);
-    } catch (e) {
-      this.logger.error(`Connection error: ${e.message}`);
+  handleConnection(client: Socket) {
+    // The handshake middleware has already authenticated the socket, so a
+    // userId is guaranteed. The guard is purely defensive.
+    const userId: string | undefined = client.data.userId;
+    if (!userId) {
       client.disconnect();
+      return;
     }
+
+    let sockets = this.connectedUsers.get(userId);
+    if (!sockets) {
+      sockets = [];
+      this.connectedUsers.set(userId, sockets);
+    }
+    sockets.push(client.id);
+
+    client.join(`user_${userId}`); // Personal room for direct events
+    this.server.emit('userStatusUpdate', { userId, online: true });
+    this.logger.log(`Client connected: ${client.id} (User: ${userId})`);
   }
 
   handleDisconnect(client: Socket) {
