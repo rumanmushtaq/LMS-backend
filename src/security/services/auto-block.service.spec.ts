@@ -107,4 +107,65 @@ describe('AutoBlockService', () => {
     await flushAsync();
     expect(ipBlockService.block).not.toHaveBeenCalled();
   });
+
+  it('does NOT block one below threshold (boundary: 2 of 3)', async () => {
+    service.recordFailedLogin('203.0.113.7', 'a@x.com');
+    service.recordFailedLogin('203.0.113.7', 'b@x.com');
+    await flushAsync();
+    expect(ipBlockService.block).not.toHaveBeenCalled();
+  });
+
+  it('prunes attempts older than the window so a slow drip never accumulates', async () => {
+    // window is 10 min (default fallback). Two early accounts, then a third
+    // long after — the first two have aged out, so only 1 is in-window.
+    const now = 1_000_000_000_000;
+    const spy = jest.spyOn(Date, 'now');
+    spy.mockReturnValue(now);
+    service.recordFailedLogin('203.0.113.7', 'a@x.com');
+    service.recordFailedLogin('203.0.113.7', 'b@x.com');
+
+    spy.mockReturnValue(now + 11 * 60_000); // 11 minutes later
+    service.recordFailedLogin('203.0.113.7', 'c@x.com');
+    await flushAsync();
+    expect(ipBlockService.block).not.toHaveBeenCalled();
+
+    // A burst inside the window still trips it.
+    service.recordFailedLogin('203.0.113.7', 'd@x.com');
+    service.recordFailedLogin('203.0.113.7', 'e@x.com');
+    await flushAsync();
+    expect(ipBlockService.block).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it('escalation is capped: many prior offenses still cap at 24× base (6h)', async () => {
+    ipBlockService.countRecentAutoBlocks.mockResolvedValue(9);
+    service.recordFailedLogin('203.0.113.7', 'a@x.com');
+    service.recordFailedLogin('203.0.113.7', 'b@x.com');
+    service.recordFailedLogin('203.0.113.7', 'c@x.com');
+    await flushAsync();
+    const arg = ipBlockService.block.mock.calls[0][0];
+    const minutes = (arg.expiresAt.getTime() - Date.now()) / 60_000;
+    expect(minutes).toBeGreaterThan(355);
+    expect(minutes).toBeLessThan(365);
+  });
+
+  it('second offense escalates to 4× base (1h)', async () => {
+    ipBlockService.countRecentAutoBlocks.mockResolvedValue(1);
+    service.recordFailedLogin('203.0.113.7', 'a@x.com');
+    service.recordFailedLogin('203.0.113.7', 'b@x.com');
+    service.recordFailedLogin('203.0.113.7', 'c@x.com');
+    await flushAsync();
+    const arg = ipBlockService.block.mock.calls[0][0];
+    const minutes = (arg.expiresAt.getTime() - Date.now()) / 60_000;
+    expect(minutes).toBeGreaterThan(55);
+    expect(minutes).toBeLessThan(65);
+  });
+
+  it('auto-block is always temporary — expiresAt is never null', async () => {
+    service.recordFailedLogin('203.0.113.7', 'a@x.com');
+    service.recordFailedLogin('203.0.113.7', 'b@x.com');
+    service.recordFailedLogin('203.0.113.7', 'c@x.com');
+    await flushAsync();
+    expect(ipBlockService.block.mock.calls[0][0].expiresAt).toBeInstanceOf(Date);
+  });
 });

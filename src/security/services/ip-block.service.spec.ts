@@ -65,4 +65,78 @@ describe('IpBlockService.findBlock', () => {
     await service.refresh(); // must not throw
     expect(service.findBlock('203.0.113.7')?.blockId).toBe('b-exact');
   });
+
+  it('isWhitelisted matches exact and CIDR entries, rejects garbage', () => {
+    expect(service.isWhitelisted('198.51.100.4')).toBe(true); // exact
+    expect(service.isWhitelisted('192.168.5.5')).toBe(true); // /16 range
+    expect(service.isWhitelisted('8.8.8.8')).toBe(false);
+    expect(service.isWhitelisted('garbage')).toBe(false);
+  });
+});
+
+describe('IpBlockService.block / unblock', () => {
+  it('blocks an IPv6 address under its /64 key and writes an audit entry', async () => {
+    const findOneAndUpdate = jest.fn().mockResolvedValue({ _id: 'x', key: '2001:db8:aa:bb::/64' });
+    const create = jest.fn().mockResolvedValue({});
+    const blockedIpModel = {
+      findOneAndUpdate,
+      find: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+      }),
+    };
+    const whitelistModel = {
+      find: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+      }),
+    };
+    const service = new IpBlockService(
+      blockedIpModel as any,
+      whitelistModel as any,
+      { create } as any,
+    );
+    await service.block({
+      ipOrCidr: '2001:db8:aa:bb:1:2:3:4',
+      reason: 'test',
+      type: 'manual' as any,
+      actor: 'admin-1',
+      actorName: 'Admin',
+      expiresAt: null,
+    });
+    // Stored under the /64 key, not the literal address.
+    expect(findOneAndUpdate.mock.calls[0][1].key).toBe('2001:db8:aa:bb::/64');
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects an unparseable block target', async () => {
+    const service = new IpBlockService(
+      { findOneAndUpdate: jest.fn() } as any,
+      {} as any,
+      { create: jest.fn() } as any,
+    );
+    await expect(
+      service.block({
+        ipOrCidr: 'not-an-ip',
+        reason: 'x',
+        type: 'manual' as any,
+        actor: 'a',
+        actorName: 'A',
+        expiresAt: null,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it('unblock returns false when nothing was blocked under that key', async () => {
+    const service = new IpBlockService(
+      { findOneAndDelete: jest.fn().mockResolvedValue(null) } as any,
+      {} as any,
+      { create: jest.fn() } as any,
+    );
+    const removed = await service.unblock({
+      key: '1.2.3.4',
+      actor: 'a',
+      actorName: 'A',
+      reason: 'r',
+    });
+    expect(removed).toBe(false);
+  });
 });
