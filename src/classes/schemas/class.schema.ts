@@ -8,6 +8,9 @@ export enum ClassStatus {
   ONGOING = 'ONGOING',
   COMPLETED = 'COMPLETED',
   CANCELLED = 'CANCELLED',
+  // A scheduled class whose end time passed without the tutor ever starting
+  // it — a no-show. Set by the missed-class sweep, never by a user action.
+  MISSED = 'MISSED',
 }
 
 /** State of the Vimeo live broadcast attached to a class session. */
@@ -120,6 +123,12 @@ export class ClassSession extends Document {
 
   @Prop({ type: Date, default: null })
   cancelledAt: Date | null;
+
+  // ── Missed (no-show) audit ──────────────────────────────────────────────
+  // When the sweep marks a class MISSED it stamps this. A tutor's MISSED
+  // count drives the 3-strike auto-block, so the record is kept, not deleted.
+  @Prop({ type: Date, default: null })
+  missedAt: Date | null;
 
   @ApiProperty({ description: 'Vimeo live-broadcast metadata for this class' })
   @Prop({ type: LiveSessionSchema, default: () => ({}) })

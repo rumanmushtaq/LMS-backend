@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 
 // Configuration
 import {
@@ -74,6 +75,9 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
         limit: 100, // 100 requests per minute
       },
     ]),
+
+    // Scheduled jobs (e.g. the missed-class sweep in ClassesService)
+    ScheduleModule.forRoot(),
 
     // Database
     DatabaseModule,

@@ -1,4 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { ClassSession, ClassSessionDocument, ClassStatus, LiveStatus } from '../schemas/class.schema';
@@ -23,8 +30,20 @@ import {
  */
 const TUTOR_CANCELLATIONS_PER_STUDENT_LIMIT = 3;
 
+/**
+ * A tutor who lets this many scheduled classes pass without ever starting
+ * them (no-shows) is auto-suspended. Unlike cancellations this is not
+ * per-student — a serial no-show harms whoever was enrolled.
+ */
+const TUTOR_MISSED_CLASSES_LIMIT = 3;
+
+/** How often the missed-class sweep runs. */
+const MISSED_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
 @Injectable()
 export class ClassesService {
+  private readonly logger = new Logger(ClassesService.name);
+
   constructor(
     @InjectModel(ClassSession.name) private classSessionModel: Model<ClassSessionDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
@@ -272,6 +291,141 @@ export class ClassesService {
       );
       return;
     }
+  }
+
+  // ─── Missed-class detection (no-show) ────────────────────────────────────
+
+  /**
+   * Cron entry point. Kept thin so the real work (sweepMissedClasses) can be
+   * called directly from tests without waiting on the timer.
+   */
+  @Interval('missed-class-sweep', MISSED_SWEEP_INTERVAL_MS)
+  async handleMissedClassSweep(): Promise<void> {
+    try {
+      const result = await this.sweepMissedClasses();
+      if (result.markedMissed > 0) {
+        this.logger.warn(
+          `Missed-class sweep: marked ${result.markedMissed} class(es) missed, suspended ${result.suspendedTutors.length} tutor(s)`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(`Missed-class sweep failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Marks every overdue no-show as MISSED and enforces the 3-strike block.
+   *
+   * A class is a no-show when its end time has passed while it was still
+   * merely SCHEDULED — i.e. approved but never started (startLive flips the
+   * status to ONGOING, so a started class is never SCHEDULED here). Pending,
+   * cancelled, ongoing and completed classes are all untouched.
+   *
+   * Returns a summary so the caller (and tests) can see exactly what changed.
+   */
+  async sweepMissedClasses(now: Date = new Date()): Promise<{
+    markedMissed: number;
+    suspendedTutors: string[];
+  }> {
+    const overdue = await this.classSessionModel
+      .find({ status: ClassStatus.SCHEDULED, endTime: { $lt: now } })
+      .select('_id tutorId title students')
+      .lean();
+
+    if (overdue.length === 0) {
+      return { markedMissed: 0, suspendedTutors: [] };
+    }
+
+    const ids = overdue.map((c) => c._id);
+    await this.classSessionModel.updateMany(
+      { _id: { $in: ids }, status: ClassStatus.SCHEDULED },
+      { status: ClassStatus.MISSED, missedAt: now },
+    );
+
+    // Tell enrolled students their class was missed.
+    await Promise.allSettled(
+      overdue.flatMap((c) =>
+        (c.students ?? []).map((s: any) =>
+          this.notificationsService.create({
+            userId: (s._id ?? s).toString(),
+            type: 'class',
+            title: `Class missed: ${c.title}`,
+            content:
+              'The tutor did not start this class before its scheduled end time.',
+            actionPayload: { kind: 'class_missed', classId: c._id.toString() },
+          }),
+        ),
+      ),
+    );
+
+    // Enforce the 3-strike block, once per affected tutor.
+    const tutorIds = [...new Set(overdue.map((c) => c.tutorId.toString()))];
+    const suspendedTutors: string[] = [];
+    for (const tutorId of tutorIds) {
+      const suspended = await this.enforceTutorMissedPolicy(tutorId);
+      if (suspended) suspendedTutors.push(tutorId);
+    }
+
+    return { markedMissed: overdue.length, suspendedTutors };
+  }
+
+  /**
+   * Suspends a tutor once their MISSED count reaches the limit and alerts
+   * every admin with the reason. Returns whether a suspension happened.
+   */
+  private async enforceTutorMissedPolicy(tutorId: string): Promise<boolean> {
+    const missedCount = await this.classSessionModel.countDocuments({
+      tutorId: new Types.ObjectId(tutorId),
+      status: ClassStatus.MISSED,
+    });
+    if (missedCount < TUTOR_MISSED_CLASSES_LIMIT) return false;
+
+    const tutor = await this.userModel
+      .findById(tutorId)
+      .select('firstName lastName email status role')
+      .lean();
+    // Not a tutor, gone, or already suspended — alert only on the transition.
+    if (
+      !tutor ||
+      tutor.role !== UserRole.TUTOR ||
+      tutor.status === UserStatus.SUSPENDED
+    ) {
+      return false;
+    }
+
+    await this.userModel.updateOne(
+      { _id: tutorId, role: UserRole.TUTOR },
+      { status: UserStatus.SUSPENDED },
+    );
+
+    const tutorName =
+      `${tutor.firstName ?? ''} ${tutor.lastName ?? ''}`.trim() || tutor.email;
+
+    const admins = await this.userModel
+      .find({ role: UserRole.ADMIN, isDeleted: { $ne: true } })
+      .select('_id')
+      .lean();
+    await Promise.allSettled(
+      admins.map((admin) =>
+        this.notificationsService.create({
+          userId: String(admin._id),
+          type: 'security',
+          title: `Tutor auto-suspended: ${tutorName}`,
+          content: `${tutorName} missed ${missedCount} scheduled classes (did not start them before their end time) and was automatically suspended. Review their account to reinstate or remove them.`,
+          actionPayload: {
+            kind: 'tutor_auto_suspended',
+            reason: 'missed_classes',
+            tutorId,
+            missedCount,
+          },
+        }),
+      ),
+    );
+
+    this.logger.warn(
+      `Auto-suspended tutor ${tutorId}: ${missedCount} missed classes`,
+    );
+    return true;
   }
 
   async remove(id: string, userId: string, isAdmin: boolean = false): Promise<void> {
