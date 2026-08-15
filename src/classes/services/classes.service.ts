@@ -63,6 +63,51 @@ export class ClassesService {
     return newClass.save();
   }
 
+  private displayName(user: any): string {
+    if (!user) return 'Someone';
+    return (
+      `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() ||
+      user.email ||
+      'Someone'
+    );
+  }
+
+  /**
+   * Persist a notification and push it live over the socket. Best-effort:
+   * a notification failure must never break the class action that triggered
+   * it, so everything here is caught and logged.
+   */
+  private async pushNotification(
+    userId: string | Types.ObjectId,
+    payload: {
+      type: string;
+      title: string;
+      content: string;
+      actionPayload?: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    try {
+      await this.notificationsService.create({
+        userId: String(userId),
+        type: payload.type,
+        title: payload.title,
+        content: payload.content,
+        actionPayload: payload.actionPayload,
+      });
+      // Real-time bell update for anyone currently connected.
+      this.chatGateway.emitToUsers([String(userId)], 'newNotification', {
+        type: payload.type,
+        title: payload.title,
+        content: payload.content,
+        actionPayload: payload.actionPayload,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to notify ${String(userId)}: ${error.message}`,
+      );
+    }
+  }
+
   // ─── Student requests a class from a specific tutor ──────────────────────────
   async requestClass(studentId: string, dto: RequestClassDto): Promise<ClassSession> {
     const newClass = new this.classSessionModel({
@@ -75,7 +120,24 @@ export class ClassesService {
       status: ClassStatus.PENDING_APPROVAL,
       students: [new Types.ObjectId(studentId)],
     });
-    return newClass.save();
+    const saved = await newClass.save();
+
+    // Tell the tutor a student is requesting a class from them.
+    const student = await this.userModel
+      .findById(studentId)
+      .select('firstName lastName email')
+      .lean();
+    await this.pushNotification(dto.tutorId, {
+      type: 'class',
+      title: 'New class request',
+      content: `${this.displayName(student)} requested a class: "${dto.title}". Review it to approve or decline.`,
+      actionPayload: {
+        kind: 'class_request',
+        classId: (saved._id as Types.ObjectId).toString(),
+      },
+    });
+
+    return saved;
   }
 
   // ─── Tutor approves a pending class request ───────────────────────────────────
@@ -97,7 +159,19 @@ export class ClassesService {
     if (dto.meetingLink) {
       classSession.meetingLink = dto.meetingLink;
     }
-    return classSession.save();
+    const saved = await classSession.save();
+
+    // Tell the student their request was approved.
+    if (classSession.requestedBy) {
+      await this.pushNotification((classSession.requestedBy as any)._id ?? classSession.requestedBy, {
+        type: 'class',
+        title: 'Class request approved',
+        content: `${this.displayName(classSession.tutorId)} approved your class: "${classSession.title}".`,
+        actionPayload: { kind: 'class_approved', classId: id },
+      });
+    }
+
+    return saved;
   }
 
   // ─── Tutor declines a pending class request ───────────────────────────────────
@@ -117,7 +191,21 @@ export class ClassesService {
 
     classSession.status = ClassStatus.CANCELLED;
     classSession.declineReason = dto.declineReason || null;
-    return classSession.save();
+    const saved = await classSession.save();
+
+    // Tell the student their request was declined, with the reason if given.
+    if (classSession.requestedBy) {
+      await this.pushNotification((classSession.requestedBy as any)._id ?? classSession.requestedBy, {
+        type: 'class',
+        title: 'Class request declined',
+        content: dto.declineReason
+          ? `${this.displayName(classSession.tutorId)} declined your class "${classSession.title}": ${dto.declineReason}`
+          : `${this.displayName(classSession.tutorId)} declined your class "${classSession.title}".`,
+        actionPayload: { kind: 'class_declined', classId: id },
+      });
+    }
+
+    return saved;
   }
 
   // ─── Get all pending requests for a specific tutor ───────────────────────────
