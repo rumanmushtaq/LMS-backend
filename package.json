@@ -92,6 +92,16 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/$1",
+      "^@auth/(.*)$": "<rootDir>/auth/$1",
+      "^@users/(.*)$": "<rootDir>/users/$1",
+      "^@admin/(.*)$": "<rootDir>/admin/$1",
+      "^@common/(.*)$": "<rootDir>/common/$1",
+      "^@config/(.*)$": "<rootDir>/config/$1",
+      "^@database/(.*)$": "<rootDir>/database/$1",
+      "^@email/(.*)$": "<rootDir>/email/$1"
+    },
     "collectCoverageFrom": [
       "**/*.(t|j)s"
     ],
