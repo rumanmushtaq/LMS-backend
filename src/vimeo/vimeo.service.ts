@@ -79,7 +79,10 @@ export class VimeoService {
 
     if (!res.ok) {
       const detail =
-        data?.error || data?.developer_message || res.statusText || 'Unknown error';
+        data?.error ||
+        data?.developer_message ||
+        res.statusText ||
+        'Unknown error';
       this.logger.error(`Vimeo ${method} ${path} -> ${res.status}: ${detail}`);
       throw new BadGatewayException(`Vimeo error (${res.status}): ${detail}`);
     }
@@ -140,7 +143,9 @@ export class VimeoService {
       await this.request('DELETE', `/me/live_events/${eventId}`);
     } catch (err: any) {
       // Non-fatal: log and move on so class deletion never blocks on Vimeo.
-      this.logger.warn(`Failed to delete Vimeo event ${eventId}: ${err?.message}`);
+      this.logger.warn(
+        `Failed to delete Vimeo event ${eventId}: ${err?.message}`,
+      );
     }
   }
 }

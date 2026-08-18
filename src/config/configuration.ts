@@ -109,6 +109,9 @@ export const imagekitConfig = registerAs('imagekit', () => ({
 export const stripeConfig = registerAs('stripe', () => ({
   secretKey: process.env.STRIPE_SECRET_KEY,
   publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+  // Without this the webhook cannot be verified, and an unverified webhook is
+  // an open endpoint that lets anyone mark any payment as paid.
+  webhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
 }));
 
 export const vimeoConfig = registerAs('vimeo', () => ({
@@ -117,4 +120,17 @@ export const vimeoConfig = registerAs('vimeo', () => ({
   accessToken: process.env.VIMEO_ACCESS_TOKEN,
   // API version pinned for stable field shapes.
   apiVersion: process.env.VIMEO_API_VERSION || '3.4',
+}));
+
+/**
+ * PSE (Colombian bank transfer). Stripe cannot process PSE, so this points at
+ * whichever Colombian PSP is chosen — Wompi, Mercado Pago, ePayco, PayU or
+ * dLocal. PSE stays hidden from buyers until all three are set.
+ */
+export const pseConfig = registerAs('pse', () => ({
+  provider: process.env.PSE_PROVIDER,
+  apiKey: process.env.PSE_API_KEY,
+  apiSecret: process.env.PSE_API_SECRET,
+  webhookSecret: process.env.PSE_WEBHOOK_SECRET,
+  baseUrl: process.env.PSE_BASE_URL,
 }));

@@ -30,15 +30,18 @@ const makeUser = (over: any = {}) => ({
 describe('updateProfile', () => {
   it('404s when the user does not exist', async () => {
     const { service } = build(null);
-    await expect(service.updateProfile('missing', { firstName: 'X' } as any)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.updateProfile('missing', { firstName: 'X' } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('updates top-level names and merges kycData without dropping existing keys', async () => {
     const user = makeUser();
     const { service } = build(user);
-    await service.updateProfile('u1', { firstName: 'New', phone: '999' } as any);
+    await service.updateProfile('u1', {
+      firstName: 'New',
+      phone: '999',
+    } as any);
     expect(user.firstName).toBe('New');
     expect(user.kycData.phone).toBe('999');
     expect(user.kycData.existing).toBe('keep-me'); // not clobbered
@@ -92,7 +95,11 @@ describe('updateProfile', () => {
 
 describe('student administration (role-scoped)', () => {
   it('suspendStudent flips status to suspended, scoped to role student', async () => {
-    const student = makeUser({ role: 'student', email: 's@x.com', status: 'active' });
+    const student = makeUser({
+      role: 'student',
+      email: 's@x.com',
+      status: 'active',
+    });
     const { service, userModel } = build(student);
     await service.suspendStudent('s1');
     expect(userModel.findOneAndUpdate).toHaveBeenCalledWith(
@@ -115,9 +122,9 @@ describe('student administration (role-scoped)', () => {
 
   it('404s when the target is not a student', async () => {
     const { service } = build(null); // findOneAndUpdate → null (role mismatch)
-    await expect(service.updateStudentStatus('x', 'active')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.updateStudentStatus('x', 'active'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('deleteAccount soft-deletes rather than hard-removing', async () => {

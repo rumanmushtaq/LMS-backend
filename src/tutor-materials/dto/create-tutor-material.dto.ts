@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsNumber, Min, IsUrl, IsOptional, IsBoolean } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsNumber,
+  Min,
+  IsUrl,
+  IsOptional,
+  IsBoolean,
+} from 'class-validator';
 
 export class CreateTutorMaterialDto {
   @ApiProperty({ description: 'Title of the material (book, notes, PDF)' })
@@ -28,7 +36,9 @@ export class CreateTutorMaterialDto {
   @IsString()
   coverImageUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Whether the material is active/visible' })
+  @ApiPropertyOptional({
+    description: 'Whether the material is active/visible',
+  })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

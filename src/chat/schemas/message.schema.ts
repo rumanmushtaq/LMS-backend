@@ -9,7 +9,11 @@ export type MessageDocument = HydratedDocument<Message>;
 @Schema({ timestamps: true })
 export class Message extends Document {
   @ApiProperty({ description: 'The conversation this message belongs to' })
-  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true })
+  @Prop({
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Conversation',
+    required: true,
+  })
   conversationId: mongoose.Types.ObjectId;
 
   @ApiProperty({ description: 'The sender of the message' })

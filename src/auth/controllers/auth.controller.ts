@@ -231,10 +231,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify 2FA code to complete login' })
   @ApiResponse({ status: 200, description: '2FA verification successful' })
   @ApiResponse({ status: 401, description: 'Invalid verification code' })
-  async verify2FA(@Body() verify2FADto: Verify2FADto) {
+  async verify2FA(@Body() verify2FADto: Verify2FADto, @Req() req: Request) {
     return this.authService.verify2FA(
       verify2FADto.sessionToken,
       verify2FADto.code,
+      sessionContextFrom(req),
     );
   }
 
@@ -268,8 +269,13 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Logout current user' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  async logout(@CurrentUser() user: UserDocument) {
-    return this.authService.logout(user);
+  async logout(
+    @CurrentUser() user: UserDocument,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    // The session is taken from the validated request, never from the body —
+    // otherwise one user could revoke another user's session by guessing an id.
+    return this.authService.logout(user, req.session?._id.toString());
   }
 
   @UseGuards(JwtAuthGuard)

@@ -30,7 +30,9 @@ export class TutorMaterial {
   @Prop({ type: String, default: null })
   coverImageUrl: string | null;
 
-  @ApiProperty({ description: 'Whether the material is active and available for purchase' })
+  @ApiProperty({
+    description: 'Whether the material is active and available for purchase',
+  })
   @Prop({ default: true })
   isActive: boolean;
 }

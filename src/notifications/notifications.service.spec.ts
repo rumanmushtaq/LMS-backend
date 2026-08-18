@@ -22,7 +22,12 @@ describe('NotificationsService', () => {
       return { save };
     };
     const service = new NotificationsService(model);
-    await service.create({ userId: UID, type: 'class', title: 't', content: 'c' } as any);
+    await service.create({
+      userId: UID,
+      type: 'class',
+      title: 't',
+      content: 'c',
+    } as any);
     expect(save).toHaveBeenCalled();
   });
 
@@ -31,10 +36,16 @@ describe('NotificationsService', () => {
     const model: any = {
       find: jest.fn().mockReturnValue(chain(items)),
       // total, then unreadCount
-      countDocuments: jest.fn().mockResolvedValueOnce(7).mockResolvedValueOnce(3),
+      countDocuments: jest
+        .fn()
+        .mockResolvedValueOnce(7)
+        .mockResolvedValueOnce(3),
     };
     const service = new NotificationsService(model);
-    const res = await service.findAllForUser(UID, { page: 1, limit: 10 } as any);
+    const res = await service.findAllForUser(UID, {
+      page: 1,
+      limit: 10,
+    } as any);
     expect(res.data).toHaveLength(2);
     expect(res.meta.total).toBe(7);
     expect(res.meta.totalPages).toBe(1);
@@ -67,7 +78,9 @@ describe('NotificationsService', () => {
   it('markAsRead 404s when nothing matches (wrong owner or missing)', async () => {
     const model: any = { findOneAndUpdate: jest.fn().mockResolvedValue(null) };
     const service = new NotificationsService(model);
-    await expect(service.markAsRead(NID, UID)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.markAsRead(NID, UID)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('markAllAsRead only touches unread and returns the count', async () => {

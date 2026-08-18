@@ -27,7 +27,8 @@ export class MaterialPurchase {
   status: string;
 }
 
-export const MaterialPurchaseSchema = SchemaFactory.createForClass(MaterialPurchase);
+export const MaterialPurchaseSchema =
+  SchemaFactory.createForClass(MaterialPurchase);
 MaterialPurchaseSchema.index({ studentId: 1 });
 MaterialPurchaseSchema.index({ materialId: 1 });
 MaterialPurchaseSchema.index({ stripePaymentIntentId: 1 }, { unique: true });

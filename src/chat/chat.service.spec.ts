@@ -25,16 +25,20 @@ const convo = (over: any = {}) => ({
 describe('assertParticipant (the core chat authorization gate)', () => {
   it('returns the conversation for a real participant', async () => {
     const { service } = build();
-    jest.spyOn(service, 'getConversationById').mockResolvedValue(convo() as any);
+    jest
+      .spyOn(service, 'getConversationById')
+      .mockResolvedValue(convo() as any);
     await expect(service.assertParticipant('conv-1', A)).resolves.toBeDefined();
   });
 
   it('refuses a non-participant (403)', async () => {
     const { service } = build();
-    jest.spyOn(service, 'getConversationById').mockResolvedValue(convo() as any);
-    await expect(service.assertParticipant('conv-1', OUTSIDER)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    jest
+      .spyOn(service, 'getConversationById')
+      .mockResolvedValue(convo() as any);
+    await expect(
+      service.assertParticipant('conv-1', OUTSIDER),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('404s for a missing conversation', async () => {
@@ -49,18 +53,18 @@ describe('assertParticipant (the core chat authorization gate)', () => {
 describe('assertMessageParticipant', () => {
   it('404s on an invalid message id (no DB hit)', async () => {
     const { service, messageModel } = build();
-    await expect(service.assertMessageParticipant('not-an-id', A)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.assertMessageParticipant('not-an-id', A),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(messageModel.findById).not.toHaveBeenCalled();
   });
 
   it('404s when the message is missing', async () => {
     const { service, messageModel } = build();
     messageModel.findById.mockResolvedValue(null);
-    await expect(service.assertMessageParticipant(MSG, A)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.assertMessageParticipant(MSG, A),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('delegates to assertParticipant on the owning conversation', async () => {
@@ -90,9 +94,9 @@ describe('block / unblock (only the blocker can unblock)', () => {
     conversationModel.findById.mockResolvedValue(
       convo({ isBlocked: true, blockedBy: { toString: () => A } }),
     );
-    await expect(service.unblockConversation('conv-1', B)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.unblockConversation('conv-1', B),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('the blocker can unblock', async () => {
@@ -116,7 +120,11 @@ describe('block / unblock (only the blocker can unblock)', () => {
 describe('flagMessage (moderation)', () => {
   it('flags a message with a reason', async () => {
     const { service, messageModel } = build();
-    const m = { isFlagged: false, flagReason: null, save: jest.fn().mockResolvedValue(true) };
+    const m = {
+      isFlagged: false,
+      flagReason: null,
+      save: jest.fn().mockResolvedValue(true),
+    };
     messageModel.findById.mockResolvedValue(m);
     await service.flagMessage(MSG, 'spam');
     expect(m.isFlagged).toBe(true);
@@ -126,6 +134,8 @@ describe('flagMessage (moderation)', () => {
   it('404s when flagging a missing message', async () => {
     const { service, messageModel } = build();
     messageModel.findById.mockResolvedValue(null);
-    await expect(service.flagMessage(MSG, 'x')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.flagMessage(MSG, 'x')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

@@ -70,4 +70,3 @@ export class AdminSeeder implements OnModuleInit {
     }
   }
 }
-

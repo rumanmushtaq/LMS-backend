@@ -349,46 +349,70 @@ export class InstructorsService {
       .lean()
       .exec();
 
-    const courseList = courses.length > 0 ? courses : [
-      {
-        _id: `mock-course-1-${user._id}`,
-        title: `Ultimate ${kc.title || 'Web Development'} Masterclass`,
-        price: kc.hourlyRate ? kc.hourlyRate * 2 : 99,
-        averageRating: kc.rating || 4.8,
-        reviewCount: Math.ceil((kc.reviewCount || 150) / 3),
-        image: "/images/course-1.jpg",
-        category: kc.categories?.[0] || "Development"
-      },
-      {
-        _id: `mock-course-2-${user._id}`,
-        title: `Advanced ${kc.categories?.[0] || 'Design'} Bootcamp`,
-        price: kc.hourlyRate ? Math.ceil(kc.hourlyRate * 1.5) : 49,
-        averageRating: 4.7,
-        reviewCount: Math.ceil((kc.reviewCount || 100) / 4),
-        image: "/images/course-2.jpg",
-        category: kc.categories?.[0] || "UI/UX Design"
-      }
-    ];
+    const courseList =
+      courses.length > 0
+        ? courses
+        : [
+            {
+              _id: `mock-course-1-${user._id}`,
+              title: `Ultimate ${kc.title || 'Web Development'} Masterclass`,
+              price: kc.hourlyRate ? kc.hourlyRate * 2 : 99,
+              averageRating: kc.rating || 4.8,
+              reviewCount: Math.ceil((kc.reviewCount || 150) / 3),
+              image: '/images/course-1.jpg',
+              category: kc.categories?.[0] || 'Development',
+            },
+            {
+              _id: `mock-course-2-${user._id}`,
+              title: `Advanced ${kc.categories?.[0] || 'Design'} Bootcamp`,
+              price: kc.hourlyRate ? Math.ceil(kc.hourlyRate * 1.5) : 49,
+              averageRating: 4.7,
+              reviewCount: Math.ceil((kc.reviewCount || 100) / 4),
+              image: '/images/course-2.jpg',
+              category: kc.categories?.[0] || 'UI/UX Design',
+            },
+          ];
 
     // Fallbacks for profile detail fields
-    const defaultAboutMe = "Very well thought out and articulate communication. Clear milestones, deadlines and fast work. Patience. Infinite patience. No shortcuts. Even if the client is being careless. Some quick example text to build on the card title and bulk the card's content Moltin gives you platform.";
-    
+    const defaultAboutMe =
+      "Very well thought out and articulate communication. Clear milestones, deadlines and fast work. Patience. Infinite patience. No shortcuts. Even if the client is being careless. Some quick example text to build on the card title and bulk the card's content Moltin gives you platform.";
+
     const defaultEducation = [
-      { degree: "BCA - Bachelor of Computer Applications", institution: "International University", period: "2004 - 2010" },
-      { degree: "MCA - Master of Computer Application", institution: "International University", period: "2010 - 2012" },
-      { degree: "Design Communication Visual", institution: "International University", period: "2012 - 2015" }
+      {
+        degree: 'BCA - Bachelor of Computer Applications',
+        institution: 'International University',
+        period: '2004 - 2010',
+      },
+      {
+        degree: 'MCA - Master of Computer Application',
+        institution: 'International University',
+        period: '2010 - 2012',
+      },
+      {
+        degree: 'Design Communication Visual',
+        institution: 'International University',
+        period: '2012 - 2015',
+      },
     ];
 
     const defaultExperience = [
-      { role: "Web Design & Development Team Leader", company: "Creative Agency", period: "2013 - 2016" },
-      { role: "Project Manager", company: "Jobcy Technology Pvt.Ltd", period: "2016 - Present" }
+      {
+        role: 'Web Design & Development Team Leader',
+        company: 'Creative Agency',
+        period: '2013 - 2016',
+      },
+      {
+        role: 'Project Manager',
+        company: 'Jobcy Technology Pvt.Ltd',
+        period: '2016 - Present',
+      },
     ];
 
     const defaultCertifications = [
-      "Certified Web Developer Badge",
-      "UI/UX Professional Certification",
-      "Adobe Design Associate",
-      "Google UX Design Professional Certificate"
+      'Certified Web Developer Badge',
+      'UI/UX Professional Certification',
+      'Adobe Design Associate',
+      'Google UX Design Professional Certificate',
     ];
 
     return {
@@ -412,17 +436,26 @@ export class InstructorsService {
       studentCount: kc.studentCount ?? 0,
       hourlyRate: kc.hourlyRate ?? kc.pricePerHour ?? null,
       createdAt: user.createdAt,
-      education: kc.education && kc.education.length > 0 ? kc.education : defaultEducation,
-      experience: kc.experience && kc.experience.length > 0 ? kc.experience : defaultExperience,
-      certifications: kc.certifications && kc.certifications.length > 0 ? kc.certifications : defaultCertifications,
+      education:
+        kc.education && kc.education.length > 0
+          ? kc.education
+          : defaultEducation,
+      experience:
+        kc.experience && kc.experience.length > 0
+          ? kc.experience
+          : defaultExperience,
+      certifications:
+        kc.certifications && kc.certifications.length > 0
+          ? kc.certifications
+          : defaultCertifications,
       social: {
-        instagram: kc.social?.instagram || "https://instagram.com",
-        twitter: kc.social?.twitter || "https://twitter.com",
-        youtube: kc.social?.youtube || "https://youtube.com",
-        linkedin: kc.social?.linkedin || "https://linkedin.com",
+        instagram: kc.social?.instagram || 'https://instagram.com',
+        twitter: kc.social?.twitter || 'https://twitter.com',
+        youtube: kc.social?.youtube || 'https://youtube.com',
+        linkedin: kc.social?.linkedin || 'https://linkedin.com',
       },
-      phone: kc.phone || "+1(452) 125-6789",
-      address: kc.address || "877 Ferry Street, Huntsville, Alabama",
+      phone: kc.phone || '+1(452) 125-6789',
+      address: kc.address || '877 Ferry Street, Huntsville, Alabama',
       courses: courseList,
       availability: kc.availability || [],
     };
@@ -509,7 +542,7 @@ export class InstructorsService {
       .exec();
 
     let totalRevenue = 0;
-    let studentsThisMonth = new Set<string>();
+    const studentsThisMonth = new Set<string>();
 
     // Earnings by month (0-11)
     const earningsByMonth = new Array(12).fill(0);

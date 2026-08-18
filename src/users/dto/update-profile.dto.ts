@@ -285,7 +285,8 @@ export class UpdateProfileDto {
 
   @ApiPropertyOptional({
     example: 'Expert',
-    description: 'Teaching experience level. Distinct from the experience array.',
+    description:
+      'Teaching experience level. Distinct from the experience array.',
   })
   @IsString()
   @IsOptional()

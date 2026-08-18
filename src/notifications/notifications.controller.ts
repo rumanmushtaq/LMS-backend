@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Patch, Param, Query, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { ApiOperation } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
@@ -13,7 +23,10 @@ export class NotificationsController {
   @Get()
   @ApiOperation({ summary: 'Get notifications' })
   findAll(@Request() req: any, @Query() query: GetNotificationsDto) {
-    return this.notificationsService.findAllForUser(req.user._id.toString(), query);
+    return this.notificationsService.findAllForUser(
+      req.user._id.toString(),
+      query,
+    );
   }
 
   @Patch('read-all')

@@ -49,4 +49,3 @@ export class Disable2FADto {
   @Length(6, 6, { message: 'TOTP code must be 6 digits' })
   totpCode: string;
 }
-

@@ -718,7 +718,9 @@ export class AdminService {
       tutor.firstName,
     );
 
-    this.logger.log(`Tutor approved & emailVerified set to true: ${tutor.email}`);
+    this.logger.log(
+      `Tutor approved & emailVerified set to true: ${tutor.email}`,
+    );
 
     return tutor;
   }

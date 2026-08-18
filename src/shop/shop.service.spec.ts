@@ -6,16 +6,22 @@ import { ShopService } from './shop.service';
  * integrity (the client never dictates the amount), and the confirm flow
  * that trusts Stripe's status rather than the caller's word.
  */
-function build(opts: {
-  products?: Record<string, any>;
-  order?: any;
-  piStatus?: string;
-} = {}) {
+function build(
+  opts: {
+    products?: Record<string, any>;
+    order?: any;
+    piStatus?: string;
+  } = {},
+) {
   const { products = {}, order = null, piStatus = 'succeeded' } = opts;
 
   const savedOrders: any[] = [];
   const shopOrderModel: any = function (doc: any) {
-    const o = { ...doc, _id: 'order-1', save: jest.fn().mockResolvedValue(true) };
+    const o = {
+      ...doc,
+      _id: 'order-1',
+      save: jest.fn().mockResolvedValue(true),
+    };
     savedOrders.push(o);
     return o;
   };
@@ -26,7 +32,9 @@ function build(opts: {
   };
 
   const paymentIntents = {
-    create: jest.fn().mockResolvedValue({ id: 'pi_1', client_secret: 'secret_1' }),
+    create: jest
+      .fn()
+      .mockResolvedValue({ id: 'pi_1', client_secret: 'secret_1' }),
     retrieve: jest.fn().mockResolvedValue({ status: piStatus }),
   };
 
@@ -55,7 +63,9 @@ describe('createPaymentIntent — cart validation', () => {
   it('rejects a cart referencing a missing product', async () => {
     const { service } = build({ products: {} });
     await expect(
-      service.createPaymentIntent('u1', [{ productId: 'nope', quantity: 1 } as any]),
+      service.createPaymentIntent('u1', [
+        { productId: 'nope', quantity: 1 } as any,
+      ]),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -64,7 +74,9 @@ describe('createPaymentIntent — cart validation', () => {
       products: { p1: { _id: 'p1', price: 10, isActive: false } },
     });
     await expect(
-      service.createPaymentIntent('u1', [{ productId: 'p1', quantity: 1 } as any]),
+      service.createPaymentIntent('u1', [
+        { productId: 'p1', quantity: 1 } as any,
+      ]),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
@@ -79,7 +91,11 @@ describe('createPaymentIntent — price integrity (server computes the amount)',
     ]);
     // 19.99 * 100 = 1999 cents * 3 = 5997 — never a client-supplied figure.
     expect(paymentIntents.create).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 5997, currency: 'usd', metadata: { userId: 'u1' } }),
+      expect.objectContaining({
+        amount: 5997,
+        currency: 'usd',
+        metadata: { userId: 'u1' },
+      }),
     );
     expect(res.clientSecret).toBe('secret_1');
     expect(res.orderId).toBe('order-1');
@@ -102,7 +118,9 @@ describe('createPaymentIntent — price integrity (server computes the amount)',
     const { service, savedOrders } = build({
       products: { p1: activeProduct('p1', 10) },
     });
-    await service.createPaymentIntent('u1', [{ productId: 'p1', quantity: 1 } as any]);
+    await service.createPaymentIntent('u1', [
+      { productId: 'p1', quantity: 1 } as any,
+    ]);
     expect(savedOrders[0].status).toBe('pending');
     expect(savedOrders[0].stripePaymentIntentId).toBe('pi_1');
     expect(savedOrders[0].totalAmount).toBe(10);
@@ -112,7 +130,10 @@ describe('createPaymentIntent — price integrity (server computes the amount)',
 
 describe('confirmPayment — trusts Stripe, not the caller', () => {
   it('marks the order paid only when Stripe says succeeded', async () => {
-    const order = { status: 'pending', save: jest.fn().mockResolvedValue(true) };
+    const order = {
+      status: 'pending',
+      save: jest.fn().mockResolvedValue(true),
+    };
     const { service } = build({ order, piStatus: 'succeeded' });
     const res = await service.confirmPayment('pi_1');
     expect(res.status).toBe('paid');
@@ -120,14 +141,20 @@ describe('confirmPayment — trusts Stripe, not the caller', () => {
   });
 
   it('marks the order failed when Stripe says canceled', async () => {
-    const order = { status: 'pending', save: jest.fn().mockResolvedValue(true) };
+    const order = {
+      status: 'pending',
+      save: jest.fn().mockResolvedValue(true),
+    };
     const { service } = build({ order, piStatus: 'canceled' });
     const res = await service.confirmPayment('pi_1');
     expect(res.status).toBe('failed');
   });
 
   it('leaves the order pending for an in-between Stripe status', async () => {
-    const order = { status: 'pending', save: jest.fn().mockResolvedValue(true) };
+    const order = {
+      status: 'pending',
+      save: jest.fn().mockResolvedValue(true),
+    };
     const { service } = build({ order, piStatus: 'processing' });
     const res = await service.confirmPayment('pi_1');
     expect(res.status).toBe('pending'); // not flipped on an unknown status

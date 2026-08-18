@@ -47,7 +47,10 @@ describe('RolesGuard', () => {
   });
 
   it('is a no-op when a route declares no roles', () => {
-    const { guard, context } = makeContext({ role: UserRole.STUDENT }, undefined);
+    const { guard, context } = makeContext(
+      { role: UserRole.STUDENT },
+      undefined,
+    );
     expect(guard.canActivate(context)).toBe(true);
   });
 });

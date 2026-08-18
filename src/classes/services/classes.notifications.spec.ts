@@ -21,7 +21,11 @@ function build() {
     findById: jest.fn(() => ({
       select: () => ({
         lean: () =>
-          Promise.resolve({ firstName: 'Sam', lastName: 'Student', email: 's@x.com' }),
+          Promise.resolve({
+            firstName: 'Sam',
+            lastName: 'Student',
+            email: 's@x.com',
+          }),
       }),
     })),
   };
@@ -41,7 +45,13 @@ const populatedClass = (over: any = {}) => ({
   _id: 'class-1',
   title: 'Algebra',
   status: ClassStatus.PENDING_APPROVAL,
-  tutorId: { _id: TUTOR, firstName: 'Terry', lastName: 'Tutor', email: 't@x.com', toString: () => TUTOR },
+  tutorId: {
+    _id: TUTOR,
+    firstName: 'Terry',
+    lastName: 'Tutor',
+    email: 't@x.com',
+    toString: () => TUTOR,
+  },
   requestedBy: { _id: STUDENT, firstName: 'Sam', lastName: 'Student' },
   meetingLink: null,
   declineReason: null,
@@ -66,7 +76,11 @@ describe('requestClass notifications', () => {
     expect(note.actionPayload.kind).toBe('class_request');
     expect(note.content).toMatch(/Sam Student/);
     // pushed live too
-    expect(emitToUsers).toHaveBeenCalledWith([TUTOR], 'newNotification', expect.any(Object));
+    expect(emitToUsers).toHaveBeenCalledWith(
+      [TUTOR],
+      'newNotification',
+      expect.any(Object),
+    );
   });
 });
 
@@ -81,13 +95,19 @@ describe('approveClass notifications', () => {
     expect(note.userId).toBe(STUDENT); // student recipient
     expect(note.actionPayload.kind).toBe('class_approved');
     expect(note.title).toMatch(/approved/i);
-    expect(emitToUsers).toHaveBeenCalledWith([STUDENT], 'newNotification', expect.any(Object));
+    expect(emitToUsers).toHaveBeenCalledWith(
+      [STUDENT],
+      'newNotification',
+      expect.any(Object),
+    );
   });
 
   it('does not notify when a non-owner tries to approve (throws first)', async () => {
     const { service, notify } = build();
     jest.spyOn(service, 'findOne').mockResolvedValue(populatedClass() as any);
-    await expect(service.approveClass('class-1', 'someone-else', {} as any)).rejects.toThrow();
+    await expect(
+      service.approveClass('class-1', 'someone-else', {} as any),
+    ).rejects.toThrow();
     expect(notify).not.toHaveBeenCalled();
   });
 });
@@ -97,13 +117,19 @@ describe('declineClass notifications', () => {
     const { service, notify, emitToUsers } = build();
     jest.spyOn(service, 'findOne').mockResolvedValue(populatedClass() as any);
 
-    await service.declineClass('class-1', TUTOR, { declineReason: 'Schedule clash' } as any);
+    await service.declineClass('class-1', TUTOR, {
+      declineReason: 'Schedule clash',
+    } as any);
 
     const note = notify.mock.calls[0][0];
     expect(note.userId).toBe(STUDENT);
     expect(note.actionPayload.kind).toBe('class_declined');
     expect(note.content).toMatch(/Schedule clash/);
-    expect(emitToUsers).toHaveBeenCalledWith([STUDENT], 'newNotification', expect.any(Object));
+    expect(emitToUsers).toHaveBeenCalledWith(
+      [STUDENT],
+      'newNotification',
+      expect.any(Object),
+    );
   });
 
   it('declines cleanly with no reason (still notifies)', async () => {

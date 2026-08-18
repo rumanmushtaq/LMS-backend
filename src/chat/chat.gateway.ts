@@ -18,6 +18,16 @@ import { Logger } from '@nestjs/common';
 import { resolveClientIp } from '../common/utils';
 import { IpBlockService } from '../security/services/ip-block.service';
 import { IpActivityService } from '../security/services/ip-activity.service';
+import { SessionService } from '../auth/services/session.service';
+
+/**
+ * Upper bound on a single chat message.
+ *
+ * Generous for prose, but the socket handler had no limit at all — a scripted
+ * client could store an unbounded string, and every participant would then be
+ * pushed the whole thing on every history load.
+ */
+const MAX_MESSAGE_LENGTH = 5000;
 
 @WebSocketGateway({
   cors: {
@@ -29,7 +39,7 @@ export class ChatGateway
 {
   @WebSocketServer()
   server: Server;
-  
+
   private logger = new Logger('ChatGateway');
 
   // Keep track of connected users: Map<userId, socketId[]>
@@ -47,6 +57,7 @@ export class ChatGateway
     private readonly configService: ConfigService,
     private readonly ipBlockService: IpBlockService,
     private readonly ipActivityService: IpActivityService,
+    private readonly sessionService: SessionService,
   ) {}
 
   /**
@@ -66,7 +77,7 @@ export class ChatGateway
    * not error — that ERROR-level noise was the reported symptom.
    */
   afterInit(server: Server) {
-    server.use((client: Socket, next: (err?: Error) => void) => {
+    server.use(async (client: Socket, next: (err?: Error) => void) => {
       try {
         // HTTP middleware never sees WebSocket upgrades, so the blocklist has
         // to be consulted here too — same resolver, same trust rules.
@@ -90,7 +101,9 @@ export class ChatGateway
             this.logger.warn(`Refused socket from blocked IP ${ip}`);
             return next(new Error('Access restricted'));
           }
-          this.logger.warn(`[shadow] would refuse socket from blocked IP ${ip}`);
+          this.logger.warn(
+            `[shadow] would refuse socket from blocked IP ${ip}`,
+          );
         }
 
         const token = this.extractTokenFromHeader(client);
@@ -99,8 +112,16 @@ export class ChatGateway
         }
 
         const payload = this.jwtService.verify(token);
+
+        // A valid signature is not enough. Without this the socket would be a
+        // way around the idle timeout: an access token stays signature-valid
+        // for its full 15 minutes, so a logged-out or idle-expired user could
+        // still open a connection and keep chatting.
+        await this.sessionService.assertActive(payload.sid);
+
         // Resolved once here; handleConnection and every handler trust it.
         client.data.userId = payload.sub || payload.userId;
+        client.data.sessionId = payload.sid;
         return next();
       } catch (e) {
         // Expired tokens are expected and recoverable — the client refreshes
@@ -161,7 +182,10 @@ export class ChatGateway
     @MessageBody() conversationId: string,
   ) {
     try {
-      await this.chatService.assertParticipant(conversationId, client.data.userId);
+      await this.chatService.assertParticipant(
+        conversationId,
+        client.data.userId,
+      );
     } catch {
       this.logger.warn(
         `User ${client.data.userId} tried to join conversation ${conversationId} they are not part of`,
@@ -181,7 +205,11 @@ export class ChatGateway
   }
 
   /** Emit an event directly to a set of users' personal rooms. */
-  emitToUsers(userIds: Array<string | { toString(): string }>, event: string, payload: any) {
+  emitToUsers(
+    userIds: Array<string | { toString(): string }>,
+    event: string,
+    payload: any,
+  ) {
     for (const id of userIds) {
       this.server.to(`user_${id.toString()}`).emit(event, payload);
     }
@@ -226,12 +254,32 @@ export class ChatGateway
     senderId: string,
     payload: { conversationId: string; content: string },
   ) {
-    const { conversationId, content } = payload;
+    const { conversationId } = payload;
+
+    // Validate the message before touching the database. Mongoose's `required`
+    // check used to be the only thing standing here, and it surfaced to the
+    // client as a bare "Internal server error" with no indication of what was
+    // wrong — which is what an over-eager Enter key produced.
+    const content =
+      typeof payload.content === 'string' ? payload.content.trim() : '';
+
+    if (!content) {
+      throw new WsException('Message cannot be empty');
+    }
+
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      throw new WsException(
+        `Message is too long (max ${MAX_MESSAGE_LENGTH} characters)`,
+      );
+    }
 
     // Knowing a conversation id is not permission to post into it.
     let conversation: Awaited<ReturnType<ChatService['assertParticipant']>>;
     try {
-      conversation = await this.chatService.assertParticipant(conversationId, senderId);
+      conversation = await this.chatService.assertParticipant(
+        conversationId,
+        senderId,
+      );
     } catch {
       this.logger.warn(
         `User ${senderId} tried to post into conversation ${conversationId} they are not part of`,
@@ -246,7 +294,11 @@ export class ChatGateway
       throw new WsException('This conversation is blocked');
     }
 
-    const message = await this.chatService.saveMessage(conversationId, senderId, content);
+    const message = await this.chatService.saveMessage(
+      conversationId,
+      senderId,
+      content,
+    );
     const participantIds = conversation.participants.map((p) => p.toString());
 
     // Deliver once per socket. Recipients viewing the thread are in the
@@ -263,7 +315,10 @@ export class ChatGateway
 
     // Name of whoever sent this, so a notification can label the chat it opens
     // instead of falling back to a placeholder.
-    const senderName = await this.chatService.getParticipantName(conversationId, senderId);
+    const senderName = await this.chatService.getParticipantName(
+      conversationId,
+      senderId,
+    );
 
     for (const participantId of participantIds) {
       if (participantId === senderId) continue;
@@ -299,7 +354,9 @@ export class ChatGateway
   ) {
     const senderId = client.data.userId;
     // Broadcast to others in the room
-    client.to(`conversation_${conversationId}`).emit('userTyping', { conversationId, userId: senderId });
+    client
+      .to(`conversation_${conversationId}`)
+      .emit('userTyping', { conversationId, userId: senderId });
   }
 
   @SubscribeMessage('stopTyping')
@@ -308,7 +365,9 @@ export class ChatGateway
     @MessageBody() conversationId: string,
   ) {
     const senderId = client.data.userId;
-    client.to(`conversation_${conversationId}`).emit('userStoppedTyping', { conversationId, userId: senderId });
+    client
+      .to(`conversation_${conversationId}`)
+      .emit('userStoppedTyping', { conversationId, userId: senderId });
   }
 
   @SubscribeMessage('checkStatus')
@@ -316,12 +375,15 @@ export class ChatGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() userId: string,
   ) {
-    const isOnline = this.connectedUsers.has(userId) && (this.connectedUsers.get(userId)?.length ?? 0) > 0;
+    const isOnline =
+      this.connectedUsers.has(userId) &&
+      (this.connectedUsers.get(userId)?.length ?? 0) > 0;
     client.emit('statusResponse', { userId, online: isOnline });
   }
 
   private extractTokenFromHeader(client: Socket): string | undefined {
-    const auth = client.handshake.auth.token || client.handshake.headers.authorization;
+    const auth =
+      client.handshake.auth.token || client.handshake.headers.authorization;
     if (auth && auth.startsWith('Bearer ')) {
       return auth.substring(7);
     }

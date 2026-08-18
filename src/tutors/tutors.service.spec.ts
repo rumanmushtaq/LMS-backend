@@ -19,7 +19,10 @@ function build(opts: { w9?: any; w8?: any; updated?: any } = {}) {
     create: jest.fn().mockResolvedValue({}),
     findOneAndUpdate: jest.fn().mockResolvedValue(opts.updated ?? null),
   };
-  return { service: new TutorsService(w9FormModel, w8BENFormModel), w9FormModel };
+  return {
+    service: new TutorsService(w9FormModel, w8BENFormModel),
+    w9FormModel,
+  };
 }
 
 describe('W9 form', () => {
@@ -65,9 +68,9 @@ describe('W9 form', () => {
 describe('W8-BEN form', () => {
   it('rejects a W8-BEN when a W9 already exists', async () => {
     const { service } = build({ w9: { _id: 'existing-w9' } });
-    await expect(service.createW8BENForm(USER, {} as any)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      service.createW8BENForm(USER, {} as any),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('creates a W8-BEN bound to the user when none exists', async () => {

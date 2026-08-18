@@ -21,7 +21,9 @@ function build(allOrders: any[], pagedOrders: any[]) {
       .fn()
       .mockReturnValueOnce(chain(allOrders)) // find({instructorId}).lean().exec()
       .mockReturnValueOnce(chain(pagedOrders)), // paged query
-    countDocuments: jest.fn(() => ({ exec: () => Promise.resolve(pagedOrders.length) })),
+    countDocuments: jest.fn(() => ({
+      exec: () => Promise.resolve(pagedOrders.length),
+    })),
   };
   const service = new InstructorsService({} as any, orderModel, {} as any);
   return { service };
@@ -58,7 +60,10 @@ describe('getMyEarnings', () => {
       { amountPaid: 100, orderDate: new Date('2020-03-10'), studentId: 's1' },
     ];
     const { service } = build(orders, orders);
-    const res = await service.getMyEarnings('tutor-1', new Date().getFullYear());
+    const res = await service.getMyEarnings(
+      'tutor-1',
+      new Date().getFullYear(),
+    );
     // total still counts it, but the current-year chart does not
     expect(res.totalRevenue).toBe(100);
     expect(res.earningsByMonth.every((v: number) => v === 0)).toBe(true);
@@ -66,7 +71,13 @@ describe('getMyEarnings', () => {
 
   it('maps recent orders with a short id and the course title', async () => {
     const orders = [
-      { _id: 'abcdef123456', amountPaid: 30, orderDate: new Date(), studentId: 's1', courseId: { title: 'Algebra' } },
+      {
+        _id: 'abcdef123456',
+        amountPaid: 30,
+        orderDate: new Date(),
+        studentId: 's1',
+        courseId: { title: 'Algebra' },
+      },
     ];
     const { service } = build(orders, orders);
     const res = await service.getMyEarnings('tutor-1');
@@ -76,7 +87,13 @@ describe('getMyEarnings', () => {
 
   it('falls back to "Unknown Course" when the course is missing', async () => {
     const orders = [
-      { _id: 'x1', amountPaid: 10, orderDate: new Date(), studentId: 's1', courseId: null },
+      {
+        _id: 'x1',
+        amountPaid: 10,
+        orderDate: new Date(),
+        studentId: 's1',
+        courseId: null,
+      },
     ];
     const { service } = build(orders, orders);
     const res = await service.getMyEarnings('tutor-1');

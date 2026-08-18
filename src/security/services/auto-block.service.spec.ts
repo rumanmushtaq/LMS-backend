@@ -21,7 +21,9 @@ describe('AutoBlockService', () => {
     };
     const userModel = {
       find: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+        select: jest
+          .fn()
+          .mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
       }),
     };
     service = new AutoBlockService(
@@ -166,6 +168,8 @@ describe('AutoBlockService', () => {
     service.recordFailedLogin('203.0.113.7', 'b@x.com');
     service.recordFailedLogin('203.0.113.7', 'c@x.com');
     await flushAsync();
-    expect(ipBlockService.block.mock.calls[0][0].expiresAt).toBeInstanceOf(Date);
+    expect(ipBlockService.block.mock.calls[0][0].expiresAt).toBeInstanceOf(
+      Date,
+    );
   });
 });

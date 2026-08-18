@@ -52,7 +52,9 @@ export class OnboardingService {
 
     if (dto.isUSPerson !== undefined) {
       updateData.isUSPerson = dto.isUSPerson;
-      updateData.taxFormType = dto.isUSPerson ? TaxFormType.W9 : TaxFormType.W8BEN;
+      updateData.taxFormType = dto.isUSPerson
+        ? TaxFormType.W9
+        : TaxFormType.W8BEN;
     }
 
     const updatedUser = await this.userModel.findByIdAndUpdate(

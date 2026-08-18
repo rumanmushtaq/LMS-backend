@@ -26,4 +26,3 @@ export class PaginationMeta {
   @ApiProperty({ example: 10 })
   totalPages: number;
 }
-

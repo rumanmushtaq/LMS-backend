@@ -27,7 +27,10 @@ export const BLOCK_DURATION_MS: Record<BlockDuration, number | null> = {
 };
 
 export class BlockIpDto {
-  @ApiProperty({ example: '203.0.113.7', description: 'IP address or CIDR range' })
+  @ApiProperty({
+    example: '203.0.113.7',
+    description: 'IP address or CIDR range',
+  })
   @IsString()
   @IsNotEmpty()
   @MaxLength(64)

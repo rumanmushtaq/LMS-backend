@@ -7,7 +7,9 @@ export interface PasswordResetTemplateData extends BaseTemplateData {
 
 const GRADIENT = 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
 
-export function getPasswordResetEmailHtml(data: PasswordResetTemplateData): string {
+export function getPasswordResetEmailHtml(
+  data: PasswordResetTemplateData,
+): string {
   const content = `
     <h2>Password Reset Request</h2>
     <p>
@@ -29,7 +31,9 @@ export function getPasswordResetEmailHtml(data: PasswordResetTemplateData): stri
   return getBaseTemplate(content, data, GRADIENT);
 }
 
-export function getPasswordResetEmailText(data: PasswordResetTemplateData): string {
+export function getPasswordResetEmailText(
+  data: PasswordResetTemplateData,
+): string {
   return `
 Hi ${data.firstName},
 

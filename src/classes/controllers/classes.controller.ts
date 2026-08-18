@@ -1,7 +1,23 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+  Req,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ClassesService } from '../services/classes.service';
-import { CreateClassDto, RequestClassDto, ApproveClassDto, DeclineClassDto } from '../dto/create-class.dto';
+import {
+  CreateClassDto,
+  RequestClassDto,
+  ApproveClassDto,
+  DeclineClassDto,
+} from '../dto/create-class.dto';
 import { CancelClassDto, UpdateClassDto } from '../dto/update-class.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -42,16 +58,29 @@ export class ClassesController {
   // ─── Tutor: approve a pending request ────────────────────────────────────────
   @Patch(':id/approve')
   @Roles(UserRole.TUTOR)
-  @ApiOperation({ summary: 'Tutor approves a class request and optionally sets a meeting link' })
-  approveClass(@Req() req: any, @Param('id') id: string, @Body() dto: ApproveClassDto) {
+  @ApiOperation({
+    summary:
+      'Tutor approves a class request and optionally sets a meeting link',
+  })
+  approveClass(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: ApproveClassDto,
+  ) {
     return this.classesService.approveClass(id, req.user._id.toString(), dto);
   }
 
   // ─── Tutor: decline a pending request ────────────────────────────────────────
   @Patch(':id/decline')
   @Roles(UserRole.TUTOR)
-  @ApiOperation({ summary: 'Tutor declines a class request with optional reason' })
-  declineClass(@Req() req: any, @Param('id') id: string, @Body() dto: DeclineClassDto) {
+  @ApiOperation({
+    summary: 'Tutor declines a class request with optional reason',
+  })
+  declineClass(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: DeclineClassDto,
+  ) {
     return this.classesService.declineClass(id, req.user._id.toString(), dto);
   }
 
@@ -92,9 +121,18 @@ export class ClassesController {
   @Patch(':id')
   @Roles(UserRole.TUTOR, UserRole.ADMIN)
   @ApiOperation({ summary: 'Update a class (Tutor/Admin)' })
-  update(@Req() req: any, @Param('id') id: string, @Body() updateClassDto: UpdateClassDto) {
+  update(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() updateClassDto: UpdateClassDto,
+  ) {
     const isAdmin = req.user.role === UserRole.ADMIN;
-    return this.classesService.update(id, updateClassDto, req.user._id.toString(), isAdmin);
+    return this.classesService.update(
+      id,
+      updateClassDto,
+      req.user._id.toString(),
+      isAdmin,
+    );
   }
 
   @Patch(':id/cancel')
@@ -117,7 +155,9 @@ export class ClassesController {
 
   @Delete(':id')
   @Roles(UserRole.TUTOR, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Hard-delete a class (Tutor/Admin) — prefer PATCH :id/cancel' })
+  @ApiOperation({
+    summary: 'Hard-delete a class (Tutor/Admin) — prefer PATCH :id/cancel',
+  })
   remove(@Req() req: any, @Param('id') id: string) {
     const isAdmin = req.user.role === UserRole.ADMIN;
     return this.classesService.remove(id, req.user._id.toString(), isAdmin);
@@ -134,7 +174,9 @@ export class ClassesController {
 
   @Post(':id/live/setup')
   @Roles(UserRole.TUTOR)
-  @ApiOperation({ summary: 'Provision the Vimeo live event + Q&A room (Tutor)' })
+  @ApiOperation({
+    summary: 'Provision the Vimeo live event + Q&A room (Tutor)',
+  })
   setupLive(@Req() req: any, @Param('id') id: string) {
     return this.classesService.setupLive(id, req.user._id.toString());
   }
@@ -148,7 +190,9 @@ export class ClassesController {
 
   @Post(':id/live/start')
   @Roles(UserRole.TUTOR)
-  @ApiOperation({ summary: 'Mark the broadcast as live and notify students (Tutor)' })
+  @ApiOperation({
+    summary: 'Mark the broadcast as live and notify students (Tutor)',
+  })
   startLive(@Req() req: any, @Param('id') id: string) {
     return this.classesService.startLive(id, req.user._id.toString());
   }
@@ -161,8 +205,14 @@ export class ClassesController {
   }
 
   @Get(':id/live/watch')
-  @ApiOperation({ summary: 'Get the embed URL + Q&A room to watch a live class' })
+  @ApiOperation({
+    summary: 'Get the embed URL + Q&A room to watch a live class',
+  })
   watchLive(@Req() req: any, @Param('id') id: string) {
-    return this.classesService.getWatchInfo(id, req.user._id.toString(), req.user.role);
+    return this.classesService.getWatchInfo(
+      id,
+      req.user._id.toString(),
+      req.user.role,
+    );
   }
 }

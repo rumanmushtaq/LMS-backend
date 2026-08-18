@@ -15,7 +15,13 @@ import {
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { TutorMaterialsService } from './tutor-materials.service';
 import { CreateTutorMaterialDto } from './dto/create-tutor-material.dto';
 import { UpdateTutorMaterialDto } from './dto/update-tutor-material.dto';
@@ -64,7 +70,9 @@ export class TutorMaterialsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.TUTOR)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Upload a material file to ImageKit (Tutor only, max 100MB)' })
+  @ApiOperation({
+    summary: 'Upload a material file to ImageKit (Tutor only, max 100MB)',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     description: 'File to upload (PDF, ZIP, etc.)',
@@ -82,7 +90,9 @@ export class TutorMaterialsController {
   )
   async uploadMaterialFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
-      throw new BadRequestException('No file provided. Please attach a file with the key "file".');
+      throw new BadRequestException(
+        'No file provided. Please attach a file with the key "file".',
+      );
     }
 
     if (file.size > MAX_FILE_SIZE) {
@@ -106,7 +116,11 @@ export class TutorMaterialsController {
   @Roles(UserRole.TUTOR)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update an existing material (Tutor only)' })
-  update(@Req() req: any, @Param('id') id: string, @Body() dto: UpdateTutorMaterialDto) {
+  update(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateTutorMaterialDto,
+  ) {
     return this.tutorMaterialsService.update(id, req.user._id.toString(), dto);
   }
 
@@ -125,7 +139,10 @@ export class TutorMaterialsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Purchase a material (Student only) - Mock flow' })
   purchaseMaterial(@Req() req: any, @Param('id') materialId: string) {
-    return this.tutorMaterialsService.purchaseMaterial(req.user._id.toString(), materialId);
+    return this.tutorMaterialsService.purchaseMaterial(
+      req.user._id.toString(),
+      materialId,
+    );
   }
 
   @Get('student/purchases')
@@ -134,6 +151,8 @@ export class TutorMaterialsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get materials purchased by the student' })
   getPurchasedMaterials(@Req() req: any) {
-    return this.tutorMaterialsService.getPurchasedMaterials(req.user._id.toString());
+    return this.tutorMaterialsService.getPurchasedMaterials(
+      req.user._id.toString(),
+    );
   }
 }

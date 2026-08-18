@@ -32,9 +32,13 @@ describe('CategoriesService CRUD', () => {
   });
 
   it('findOne 404s for a missing category', async () => {
-    const model: any = { findById: () => ({ exec: () => Promise.resolve(null) }) };
+    const model: any = {
+      findById: () => ({ exec: () => Promise.resolve(null) }),
+    };
     const service = build(model);
-    await expect(service.findOne('nope')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.findOne('nope')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('update 404s when the category is missing', async () => {
@@ -50,7 +54,9 @@ describe('CategoriesService CRUD', () => {
       findByIdAndDelete: () => ({ exec: () => Promise.resolve(null) }),
     };
     const service = build(model);
-    await expect(service.remove('nope')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.remove('nope')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('remove returns a success message when deleted', async () => {

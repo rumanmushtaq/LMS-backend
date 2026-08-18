@@ -62,7 +62,9 @@ export type ClassSessionDocument = HydratedDocument<ClassSession>;
 
 @Schema({ timestamps: true })
 export class ClassSession extends Document {
-  @ApiProperty({ description: 'The instructor/tutor user who teaches this class' })
+  @ApiProperty({
+    description: 'The instructor/tutor user who teaches this class',
+  })
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   tutorId: Types.ObjectId;
 
@@ -99,10 +101,16 @@ export class ClassSession extends Document {
   endTime: Date;
 
   @ApiProperty({ description: 'Status of the class', enum: ClassStatus })
-  @Prop({ type: String, enum: ClassStatus, default: ClassStatus.PENDING_APPROVAL })
+  @Prop({
+    type: String,
+    enum: ClassStatus,
+    default: ClassStatus.PENDING_APPROVAL,
+  })
   status: ClassStatus;
 
-  @ApiProperty({ description: 'Reason provided when a tutor declines a class request' })
+  @ApiProperty({
+    description: 'Reason provided when a tutor declines a class request',
+  })
   @Prop({ type: String, default: null })
   declineReason: string | null;
 
@@ -129,6 +137,18 @@ export class ClassSession extends Document {
   // count drives the 3-strike auto-block, so the record is kept, not deleted.
   @Prop({ type: Date, default: null })
   missedAt: Date | null;
+
+  // ── Start-reminder bookkeeping ──────────────────────────────────────────
+  // Stamped the first time the class-start sweep alerts enrolled students.
+  // The sweep runs every minute for the whole life of the class, so without
+  // this marker every student would be re-notified once a minute until the
+  // class ended. It is also the field the sweep claims atomically, which is
+  // what stops two API instances from double-notifying.
+  @ApiProperty({
+    description: 'When enrolled students were alerted that the class started',
+  })
+  @Prop({ type: Date, default: null })
+  startNotifiedAt: Date | null;
 
   @ApiProperty({ description: 'Vimeo live-broadcast metadata for this class' })
   @Prop({ type: LiveSessionSchema, default: () => ({}) })

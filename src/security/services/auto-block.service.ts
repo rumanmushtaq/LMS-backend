@@ -3,11 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { blockKeyForIp, normalizeIp } from '../../common/utils';
-import {
-  User,
-  UserDocument,
-  UserRole,
-} from '../../users/schemas/user.schema';
+import { User, UserDocument, UserRole } from '../../users/schemas/user.schema';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { BlockType } from '../schemas/blocked-ip.schema';
 import { IpActivityService } from './ip-activity.service';

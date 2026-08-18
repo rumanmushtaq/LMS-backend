@@ -5,7 +5,9 @@ export interface VerificationTemplateData extends BaseTemplateData {
   verificationUrl: string;
 }
 
-export function getVerificationEmailHtml(data: VerificationTemplateData): string {
+export function getVerificationEmailHtml(
+  data: VerificationTemplateData,
+): string {
   const content = `
     <h2>Welcome, ${data.firstName}!</h2>
     <p>
@@ -27,7 +29,9 @@ export function getVerificationEmailHtml(data: VerificationTemplateData): string
   return getBaseTemplate(content, data);
 }
 
-export function getVerificationEmailText(data: VerificationTemplateData): string {
+export function getVerificationEmailText(
+  data: VerificationTemplateData,
+): string {
   return `
 Welcome to ${data.appName}, ${data.firstName}!
 
