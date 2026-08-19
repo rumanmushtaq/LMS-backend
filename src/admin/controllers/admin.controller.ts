@@ -20,7 +20,7 @@ import {
   ApiQuery,
   ApiExcludeController,
 } from '@nestjs/swagger';
-import { AdminService } from '../services/admin.service';
+import { AdminService, TutorRow } from '../services/admin.service';
 import {
   CreateAdminDto,
   UpdateUserStatusDto,
@@ -261,14 +261,17 @@ export class AdminController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'sortBy', required: false })
   @ApiQuery({ name: 'sortOrder', enum: ['asc', 'desc'], required: false })
-  getTeachers(@Query() query: GetStudentsQueryDto) {
+  getTeachers(@Query() query: GetStudentsQueryDto): Promise<{
+    data: TutorRow[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
     return this.adminService.getTeachers(query);
   }
 
   @Get('tutors/:id')
   @ApiOperation({ summary: 'Get teacher details by ID' })
   @ApiParam({ name: 'id', description: 'Teacher ID' })
-  getTeacherById(@Param('id') id: string) {
+  getTeacherById(@Param('id') id: string): Promise<TutorRow> {
     return this.adminService.getTeacherById(id);
   }
 

@@ -1,14 +1,26 @@
 import {
   Injectable,
+  Logger,
+  OnModuleInit,
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { ShopOrder, ShopOrderDocument } from './schemas/shop-order.schema';
 import { Product, ProductDocument } from './schemas/product.schema';
+import { PaymentsService } from '../payments/services/payments.service';
+import { PlatformSettingsService } from '../payments/services/platform-settings.service';
+import { RevenueArea } from '../payments/schemas/platform-settings.schema';
+import { PaymentInstruction } from '../payments/providers/payment-provider.interface';
+import { toMinorUnits, toMajorUnits } from '../payments/money';
+import {
+  FulfilmentRegistry,
+  FulfilmentHandler,
+} from '../payments/services/fulfilment.registry';
+import { CheckoutDto } from './dto';
 
 export interface CheckoutItem {
   productId: string;
@@ -27,7 +39,9 @@ export interface ShippingAddress {
 }
 
 @Injectable()
-export class ShopService {
+export class ShopService implements OnModuleInit, FulfilmentHandler {
+  private readonly logger = new Logger(ShopService.name);
+
   private stripe: InstanceType<typeof Stripe> | null = null;
 
   constructor(
@@ -36,6 +50,9 @@ export class ShopService {
     @InjectModel(Product.name)
     private productModel: Model<ProductDocument>,
     private configService: ConfigService,
+    private readonly payments: PaymentsService,
+    private readonly settings: PlatformSettingsService,
+    private readonly fulfilment: FulfilmentRegistry,
   ) {
     const apiKey = this.configService.get<string>('stripe.secretKey');
     if (apiKey) {
@@ -52,29 +69,60 @@ export class ShopService {
     return this.stripe;
   }
 
-  // ─── Create Payment Intent ────────────────────────────────────────────────────
-  async createPaymentIntent(
-    userId: string,
-    items: CheckoutItem[],
-    shipping?: ShippingAddress,
-  ): Promise<{ clientSecret: string; orderId: string }> {
-    if (!items || items.length === 0) {
-      throw new BadRequestException('Cart is empty');
-    }
+  /** Take responsibility for fulfilling shop payments once they settle. */
+  onModuleInit(): void {
+    this.fulfilment.register(RevenueArea.SHOP, this);
+  }
 
-    // Validate products and compute total
-    let totalCents = 0;
+  /** FulfilmentHandler — a confirmed payment marks its order paid. */
+  async onPaid(referenceId: string): Promise<void> {
+    await this.fulfilOrder(referenceId);
+  }
+
+  /** FulfilmentHandler — a failed payment marks its order failed. */
+  async onFailed(referenceId: string, reason?: string): Promise<void> {
+    await this.failOrder(referenceId, reason);
+  }
+
+  // ─── Checkout ─────────────────────────────────────────────────────────────
+
+  /**
+   * Prices the cart server-side, records the order, and starts a payment.
+   *
+   * Two things this deliberately does NOT do:
+   *  - trust any price or total from the client. Only `productId`, `size` and
+   *    `quantity` are read; every amount comes from the database.
+   *  - mark the order paid. Only the provider webhook may do that.
+   */
+  async checkout(
+    userId: string,
+    dto: CheckoutDto,
+    buyerEmail?: string,
+  ): Promise<{
+    orderId: string;
+    paymentId: string;
+    provider: string;
+    amountMinor: number;
+    currency: string;
+    instruction: PaymentInstruction;
+  }> {
+    const currency = await this.settings.currency();
+
+    let totalMinor = 0;
     const resolvedItems: any[] = [];
 
-    for (const item of items) {
+    for (const item of dto.items) {
       const product = await this.productModel.findById(item.productId);
       if (!product || !product.isActive) {
         throw new NotFoundException(
           `Product ${item.productId} not found or inactive`,
         );
       }
-      const itemPrice = Math.round(product.price * 100); // convert to cents
-      totalCents += itemPrice * item.quantity;
+
+      // Prices are stored as major units (floats); convert once, per currency.
+      const unitMinor = toMinorUnits(product.price, currency);
+      totalMinor += unitMinor * item.quantity;
+
       resolvedItems.push({
         productId: product._id,
         size: item.size,
@@ -83,49 +131,72 @@ export class ShopService {
       });
     }
 
-    // Create Stripe PaymentIntent
-    const paymentIntent = await this.getStripe().paymentIntents.create({
-      amount: totalCents,
-      currency: 'usd',
-      automatic_payment_methods: { enabled: true },
-      metadata: { userId },
+    if (totalMinor <= 0) {
+      throw new BadRequestException('Order total must be greater than zero');
+    }
+
+    const order = await this.shopOrderModel.create({
+      userId: new Types.ObjectId(userId),
+      items: resolvedItems,
+      totalAmount: toMajorUnits(totalMinor, currency),
+      status: 'pending',
+      shippingAddress: dto.shipping,
     });
 
-    // Create pending order record
-    const order = new this.shopOrderModel({
-      userId,
-      items: resolvedItems,
-      totalAmount: totalCents / 100,
-      stripePaymentIntentId: paymentIntent.id,
-      status: 'pending',
-      shippingAddress: shipping,
+    const payment = await this.payments.startPayment({
+      buyerId: userId,
+      // Merch is a first-party sale: the platform is the seller, so no tutor
+      // is owed anything and the whole amount is platform revenue.
+      sellerId: null,
+      area: RevenueArea.SHOP,
+      referenceId: (order._id as Types.ObjectId).toString(),
+      amountMinor: totalMinor,
+      description: `Order ${(order._id as Types.ObjectId).toString()}`,
+      providerId: dto.paymentMethod,
+      buyerEmail,
     });
+
+    // Keep the provider reference on the order so support can trace it.
+    order.stripePaymentIntentId = payment.paymentId;
     await order.save();
 
     return {
-      clientSecret: paymentIntent.client_secret!,
-      orderId: (order._id as any).toString(),
+      orderId: (order._id as Types.ObjectId).toString(),
+      paymentId: payment.paymentId,
+      provider: payment.provider,
+      amountMinor: payment.grossMinor,
+      currency: payment.currency,
+      instruction: payment.instruction,
     };
   }
 
-  // ─── Confirm Payment (called after Stripe confirms) ───────────────────────────
-  async confirmPayment(paymentIntentId: string): Promise<ShopOrderDocument> {
-    const order = await this.shopOrderModel.findOne({
-      stripePaymentIntentId: paymentIntentId,
-    });
-    if (!order) throw new NotFoundException('Order not found');
-
-    // Verify with Stripe
-    const pi = await this.getStripe().paymentIntents.retrieve(paymentIntentId);
-    if (pi.status === 'succeeded') {
-      order.status = 'paid';
-      await order.save();
-    } else if (pi.status === 'canceled') {
-      order.status = 'failed';
-      await order.save();
+  /**
+   * Marks an order paid. Called only from the verified webhook path.
+   *
+   * Idempotent: PaymentsService already refuses to settle the same payment
+   * twice, and this re-check means a replayed call cannot double-fulfil.
+   */
+  async fulfilOrder(orderId: string): Promise<void> {
+    const order = await this.shopOrderModel.findById(orderId);
+    if (!order) {
+      this.logger.warn(`Cannot fulfil unknown order ${orderId}`);
+      return;
     }
+    if (order.status === 'paid') return;
 
-    return order;
+    order.status = 'paid';
+    await order.save();
+    this.logger.log(`Order ${orderId} marked paid`);
+  }
+
+  /** Records a failed or cancelled payment against the order. */
+  async failOrder(orderId: string, reason?: string): Promise<void> {
+    const order = await this.shopOrderModel.findById(orderId);
+    if (!order || order.status === 'paid') return;
+
+    order.status = 'failed';
+    await order.save();
+    this.logger.log(`Order ${orderId} marked failed${reason ? `: ${reason}` : ''}`);
   }
 
   // ─── Get My Orders ────────────────────────────────────────────────────────────

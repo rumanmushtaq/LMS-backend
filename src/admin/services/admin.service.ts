@@ -44,6 +44,19 @@ export interface DashboardStats {
   recentSignups: number;
 }
 
+/**
+ * A tutor as the admin screens consume it: the sanitised user document plus
+ * the subject fields derived from `kycData`.
+ *
+ * Declared explicitly because spreading `toJSON()` produces a type TypeScript
+ * cannot name across module boundaries.
+ */
+export interface TutorRow extends Record<string, any> {
+  /** Comma-joined subjects for the table cell; null when none are set. */
+  subject: string | null;
+  subjects: string[];
+}
+
 @Injectable()
 export class AdminService {
   private readonly logger = new Logger(AdminService.name);
@@ -607,7 +620,69 @@ export class AdminService {
   // TUTOR MANAGEMENT
   // =====================
 
-  async getTeachers(query: GetStudentsQueryDto) {
+  /**
+   * A tutor's subjects, for display in the admin teachers table.
+   *
+   * Subject data is spread across four keys in the schemaless `kycData` blob
+   * because different flows wrote different ones: onboarding KYC writes
+   * `subjects`, the profile editor writes `specialties` and `category`, and
+   * some records carry `categories`. The public instructors listing already
+   * merges the same set, so this keeps admin consistent with it.
+   */
+  private deriveSubjects(kycData: Record<string, any> | undefined): string[] {
+    const kc = kycData ?? {};
+
+    const candidates = [
+      ...(Array.isArray(kc.subjects) ? kc.subjects : []),
+      ...(Array.isArray(kc.categories) ? kc.categories : []),
+      ...(Array.isArray(kc.specialties) ? kc.specialties : []),
+      kc.category,
+    ];
+
+    // Trim, drop blanks, de-duplicate case-insensitively but keep the first
+    // spelling the tutor actually used.
+    const seen = new Set<string>();
+    const subjects: string[] = [];
+
+    for (const raw of candidates) {
+      if (typeof raw !== 'string') continue;
+      const value = raw.trim();
+      if (!value) continue;
+
+      const key = value.toLowerCase();
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      subjects.push(value);
+    }
+
+    return subjects;
+  }
+
+  /**
+   * Adds the derived subject fields to a tutor row.
+   *
+   * `toJSON()` rather than `.lean()` deliberately: the User schema's toJSON
+   * transform strips password, refresh token hash, 2FA secret and the
+   * verification tokens. A lean query skips that transform and would put all
+   * of them on the wire.
+   */
+  private withSubjects(tutor: UserDocument): TutorRow {
+    const subjects = this.deriveSubjects(tutor.kycData);
+
+    return {
+      ...tutor.toJSON(),
+      /** Display string for the admin table. */
+      subject: subjects.join(', ') || null,
+      /** Full list, for filtering and detail views. */
+      subjects,
+    };
+  }
+
+  async getTeachers(query: GetStudentsQueryDto): Promise<{
+    data: TutorRow[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
     const {
       search,
       status,
@@ -677,7 +752,7 @@ export class AdminService {
     ]);
 
     return {
-      data: tutors,
+      data: tutors.map((tutor) => this.withSubjects(tutor)),
       meta: {
         total,
         page,
@@ -687,7 +762,7 @@ export class AdminService {
     };
   }
 
-  async getTeacherById(tutorId: string): Promise<UserDocument> {
+  async getTeacherById(tutorId: string): Promise<TutorRow> {
     const tutor = await this.userModel
       .findOne({ _id: tutorId, role: UserRole.TUTOR, isDeleted: { $ne: true } })
       .exec();
@@ -696,7 +771,8 @@ export class AdminService {
       throw new NotFoundException('Tutor not found');
     }
 
-    return tutor;
+    // Same shape as the list, so the detail page reads the same fields.
+    return this.withSubjects(tutor);
   }
 
   async approveTeacher(tutorId: string): Promise<UserDocument> {
