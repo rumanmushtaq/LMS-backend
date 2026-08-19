@@ -7,10 +7,12 @@ import { ShopOrder, ShopOrderSchema } from './schemas/shop-order.schema';
 import { ProductsService } from './products.service';
 import { ShopService } from './shop.service';
 import { ShopController } from './shop.controller';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
     ConfigModule,
+    PaymentsModule,
     MulterModule.register({ dest: '/tmp/uploads' }),
     MongooseModule.forFeature([
       { name: Product.name, schema: ProductSchema },

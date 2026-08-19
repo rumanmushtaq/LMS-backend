@@ -1,49 +1,62 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ShopService } from './shop.service';
+import { RevenueArea } from '../payments/schemas/platform-settings.schema';
 
 /**
- * Payment-path coverage for the shop: cart validation, server-side price
- * integrity (the client never dictates the amount), and the confirm flow
- * that trusts Stripe's status rather than the caller's word.
+ * Payment-path coverage for the shop.
+ *
+ * The properties that matter are unchanged from the previous Stripe-direct
+ * implementation: the cart is validated, the amount is computed server-side
+ * from the database, and an order only becomes paid on a confirmed payment.
+ * What changed is that the shop now goes through PaymentsService rather than
+ * calling Stripe itself, and confirmation arrives by webhook instead of the
+ * browser asking for it.
  */
 function build(
-  opts: {
-    products?: Record<string, any>;
-    order?: any;
-    piStatus?: string;
-  } = {},
+  opts: { products?: Record<string, any>; order?: any; currency?: string } = {},
 ) {
-  const { products = {}, order = null, piStatus = 'succeeded' } = opts;
+  const { products = {}, order = null, currency = 'USD' } = opts;
 
   const savedOrders: any[] = [];
-  const shopOrderModel: any = function (doc: any) {
-    const o = {
-      ...doc,
-      _id: 'order-1',
-      save: jest.fn().mockResolvedValue(true),
-    };
-    savedOrders.push(o);
-    return o;
+  const shopOrderModel: any = {
+    create: jest.fn(async (doc: any) => {
+      const o = { ...doc, _id: 'order-1', save: jest.fn().mockResolvedValue(true) };
+      savedOrders.push(o);
+      return o;
+    }),
+    findById: jest.fn().mockResolvedValue(order),
+    findOne: jest.fn().mockResolvedValue(order),
   };
-  shopOrderModel.findOne = jest.fn().mockResolvedValue(order);
 
   const productModel: any = {
     findById: jest.fn((id: string) => Promise.resolve(products[id] ?? null)),
   };
 
-  const paymentIntents = {
-    create: jest
-      .fn()
-      .mockResolvedValue({ id: 'pi_1', client_secret: 'secret_1' }),
-    retrieve: jest.fn().mockResolvedValue({ status: piStatus }),
+  const payments: any = {
+    startPayment: jest.fn().mockResolvedValue({
+      paymentId: 'pay-1',
+      provider: 'stripe',
+      grossMinor: 0,
+      commissionMinor: 0,
+      netMinor: 0,
+      currency,
+      instruction: { kind: 'client_secret', clientSecret: 'secret_1' },
+    }),
   };
 
-  const service = new ShopService(shopOrderModel, productModel, {
-    get: () => 'sk_test_x',
-  } as any);
-  // Inject a fake Stripe so no network call happens.
-  (service as any).stripe = { paymentIntents };
-  return { service, paymentIntents, savedOrders };
+  const settings: any = { currency: jest.fn().mockResolvedValue(currency) };
+  const fulfilment: any = { register: jest.fn() };
+
+  const service = new ShopService(
+    shopOrderModel,
+    productModel,
+    { get: () => 'sk_test_x' } as any,
+    payments,
+    settings,
+    fulfilment,
+  );
+
+  return { service, payments, savedOrders, shopOrderModel, fulfilment };
 }
 
 const activeProduct = (id: string, price: number) => ({
@@ -52,20 +65,14 @@ const activeProduct = (id: string, price: number) => ({
   isActive: true,
 });
 
-describe('createPaymentIntent — cart validation', () => {
-  it('rejects an empty cart', async () => {
-    const { service } = build();
-    await expect(service.createPaymentIntent('u1', [])).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
-  });
+const cart = (items: any[], paymentMethod = 'stripe') =>
+  ({ items, paymentMethod }) as any;
 
+describe('checkout — cart validation', () => {
   it('rejects a cart referencing a missing product', async () => {
-    const { service } = build({ products: {} });
+    const { service } = build();
     await expect(
-      service.createPaymentIntent('u1', [
-        { productId: 'nope', quantity: 1 } as any,
-      ]),
+      service.checkout('user-1', cart([{ productId: 'nope', size: 'M', quantity: 1 }])),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -74,96 +81,160 @@ describe('createPaymentIntent — cart validation', () => {
       products: { p1: { _id: 'p1', price: 10, isActive: false } },
     });
     await expect(
-      service.createPaymentIntent('u1', [
-        { productId: 'p1', quantity: 1 } as any,
-      ]),
+      service.checkout('user-1', cart([{ productId: 'p1', size: 'M', quantity: 1 }])),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects a zero total', async () => {
+    const { service } = build({ products: { p1: activeProduct('p1', 0) } });
+    await expect(
+      service.checkout('user-1', cart([{ productId: 'p1', size: 'M', quantity: 1 }])),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 
-describe('createPaymentIntent — price integrity (server computes the amount)', () => {
-  it('charges price*quantity in cents from the DB, not from the client', async () => {
-    const { service, paymentIntents } = build({
-      products: { p1: activeProduct('p1', 19.99) },
+describe('checkout — price integrity (server computes the amount)', () => {
+  it('charges price*quantity from the DB, not from the client', async () => {
+    const { service, payments } = build({
+      products: { p1: activeProduct('p1', 24) },
     });
-    const res = await service.createPaymentIntent('u1', [
-      { productId: 'p1', quantity: 3 } as any,
-    ]);
-    // 19.99 * 100 = 1999 cents * 3 = 5997 — never a client-supplied figure.
-    expect(paymentIntents.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        amount: 5997,
-        currency: 'usd',
-        metadata: { userId: 'u1' },
-      }),
+
+    await service.checkout(
+      'user-1',
+      // A client-supplied price is simply not read.
+      cart([{ productId: 'p1', size: 'S', quantity: 2, price: 1 } as any]),
     );
-    expect(res.clientSecret).toBe('secret_1');
-    expect(res.orderId).toBe('order-1');
+
+    expect(payments.startPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ amountMinor: 4800, area: RevenueArea.SHOP }),
+    );
   });
 
   it('sums multiple line items correctly', async () => {
-    const { service, paymentIntents } = build({
-      products: { p1: activeProduct('p1', 10), p2: activeProduct('p2', 2.5) },
+    const { service, payments } = build({
+      products: { p1: activeProduct('p1', 19.99), p2: activeProduct('p2', 5.5) },
     });
-    await service.createPaymentIntent('u1', [
-      { productId: 'p1', quantity: 2 } as any, // 2000
-      { productId: 'p2', quantity: 4 } as any, // 1000
-    ]);
-    expect(paymentIntents.create).toHaveBeenCalledWith(
-      expect.objectContaining({ amount: 3000 }),
+
+    await service.checkout(
+      'user-1',
+      cart([
+        { productId: 'p1', size: 'M', quantity: 2 },
+        { productId: 'p2', size: 'L', quantity: 1 },
+      ]),
+    );
+
+    // 1999*2 + 550
+    expect(payments.startPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ amountMinor: 4548 }),
     );
   });
 
-  it('persists a pending order bound to the PaymentIntent', async () => {
-    const { service, savedOrders } = build({
-      products: { p1: activeProduct('p1', 10) },
+  it('prices in whole units for a zero-decimal currency', async () => {
+    // COP has no cents; multiplying by 100 would charge 100x.
+    const { service, payments } = build({
+      products: { p1: activeProduct('p1', 50000) },
+      currency: 'COP',
     });
-    await service.createPaymentIntent('u1', [
-      { productId: 'p1', quantity: 1 } as any,
-    ]);
+
+    await service.checkout('user-1', cart([{ productId: 'p1', size: 'M', quantity: 1 }]));
+
+    expect(payments.startPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ amountMinor: 50000 }),
+    );
+  });
+
+  it('persists a pending order before payment is attempted', async () => {
+    const { service, savedOrders } = build({
+      products: { p1: activeProduct('p1', 24) },
+    });
+
+    const result = await service.checkout(
+      'user-1',
+      cart([{ productId: 'p1', size: 'S', quantity: 1 }]),
+    );
+
     expect(savedOrders[0].status).toBe('pending');
-    expect(savedOrders[0].stripePaymentIntentId).toBe('pi_1');
-    expect(savedOrders[0].totalAmount).toBe(10);
-    expect(savedOrders[0].save).toHaveBeenCalled();
+    expect(savedOrders[0].totalAmount).toBe(24);
+    expect(result.orderId).toBe('order-1');
+  });
+
+  it('books the sale as first-party, so no tutor is owed commission', async () => {
+    const { service, payments } = build({
+      products: { p1: activeProduct('p1', 24) },
+    });
+
+    await service.checkout('user-1', cart([{ productId: 'p1', size: 'S', quantity: 1 }]));
+
+    expect(payments.startPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ sellerId: null }),
+    );
+  });
+
+  it('passes the buyer-selected payment method through', async () => {
+    const { service, payments } = build({
+      products: { p1: activeProduct('p1', 24) },
+    });
+
+    await service.checkout(
+      'user-1',
+      cart([{ productId: 'p1', size: 'S', quantity: 1 }], 'pse'),
+    );
+
+    expect(payments.startPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'pse' }),
+    );
   });
 });
 
-describe('confirmPayment — trusts Stripe, not the caller', () => {
-  it('marks the order paid only when Stripe says succeeded', async () => {
-    const order = {
-      status: 'pending',
-      save: jest.fn().mockResolvedValue(true),
-    };
-    const { service } = build({ order, piStatus: 'succeeded' });
-    const res = await service.confirmPayment('pi_1');
-    expect(res.status).toBe('paid');
+describe('fulfilment — only a settled payment marks an order paid', () => {
+  it('marks the order paid', async () => {
+    const order = { _id: 'order-1', status: 'pending', save: jest.fn() };
+    const { service } = build({ order });
+
+    await service.onPaid('order-1');
+
+    expect(order.status).toBe('paid');
     expect(order.save).toHaveBeenCalled();
   });
 
-  it('marks the order failed when Stripe says canceled', async () => {
-    const order = {
-      status: 'pending',
-      save: jest.fn().mockResolvedValue(true),
-    };
-    const { service } = build({ order, piStatus: 'canceled' });
-    const res = await service.confirmPayment('pi_1');
-    expect(res.status).toBe('failed');
+  it('is idempotent — a redelivered webhook does not re-save', async () => {
+    const order = { _id: 'order-1', status: 'paid', save: jest.fn() };
+    const { service } = build({ order });
+
+    await service.onPaid('order-1');
+
+    expect(order.save).not.toHaveBeenCalled();
   });
 
-  it('leaves the order pending for an in-between Stripe status', async () => {
-    const order = {
-      status: 'pending',
-      save: jest.fn().mockResolvedValue(true),
-    };
-    const { service } = build({ order, piStatus: 'processing' });
-    const res = await service.confirmPayment('pi_1');
-    expect(res.status).toBe('pending'); // not flipped on an unknown status
+  it('marks the order failed when payment fails', async () => {
+    const order = { _id: 'order-1', status: 'pending', save: jest.fn() };
+    const { service } = build({ order });
+
+    await service.onFailed('order-1', 'card declined');
+
+    expect(order.status).toBe('failed');
   });
 
-  it('404s when no order matches the PaymentIntent', async () => {
+  it('never downgrades an already-paid order to failed', async () => {
+    const order = { _id: 'order-1', status: 'paid', save: jest.fn() };
+    const { service } = build({ order });
+
+    await service.onFailed('order-1', 'late failure event');
+
+    expect(order.status).toBe('paid');
+  });
+
+  it('tolerates an unknown order rather than throwing at the webhook', async () => {
+    // Throwing would make the provider retry a webhook we handled correctly.
     const { service } = build({ order: null });
-    await expect(service.confirmPayment('pi_missing')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.onPaid('missing')).resolves.toBeUndefined();
+  });
+});
+
+describe('registration', () => {
+  it('registers itself as the shop fulfilment handler', () => {
+    const { service, fulfilment } = build();
+    service.onModuleInit();
+    expect(fulfilment.register).toHaveBeenCalledWith(RevenueArea.SHOP, service);
   });
 });

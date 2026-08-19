@@ -30,8 +30,8 @@ import { Public } from '@/common/decorators/public.decorator';
 import { CurrentUser } from '@/common/decorators';
 import { UserDocument, UserRole } from '@/users/schemas/user.schema';
 import { ProductsService } from './products.service';
-import { ShopService, CheckoutItem, ShippingAddress } from './shop.service';
-import { CreateProductDto, GetProductsDto } from './dto';
+import { ShopService } from './shop.service';
+import { CreateProductDto, GetProductsDto, CheckoutDto } from './dto';
 import { ParseObjectIdPipe } from '@/common';
 
 @ApiTags('Shop')
@@ -146,30 +146,17 @@ export class ShopController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('checkout')
-  @ApiOperation({ summary: 'Create Stripe PaymentIntent and pending order' })
-  @ApiResponse({ status: 201, description: 'Returns clientSecret and orderId' })
-  async checkout(
-    @CurrentUser() user: UserDocument,
-    @Body()
-    body: {
-      items: CheckoutItem[];
-      shipping?: ShippingAddress;
-    },
-  ) {
-    return this.shopService.createPaymentIntent(
-      user._id.toString(),
-      body.items,
-      body.shipping,
-    );
-  }
-
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @Post('confirm-payment')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Confirm payment after Stripe client confirmation' })
-  async confirmPayment(@Body() body: { paymentIntentId: string }) {
-    return this.shopService.confirmPayment(body.paymentIntentId);
+  @ApiOperation({
+    summary: 'Price the cart, create the order, and start a payment',
+  })
+  @ApiResponse({
+    status: 201,
+    description:
+      'Returns the payment instruction the client uses to complete payment. ' +
+      'The order is NOT paid until the provider webhook confirms it.',
+  })
+  async checkout(@CurrentUser() user: UserDocument, @Body() dto: CheckoutDto) {
+    return this.shopService.checkout(user._id.toString(), dto, user.email);
   }
 
   @UseGuards(JwtAuthGuard)

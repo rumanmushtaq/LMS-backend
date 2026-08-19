@@ -7,6 +7,7 @@ import {
 } from './schemas/platform-settings.schema';
 import { PaymentsService } from './services/payments.service';
 import { PlatformSettingsService } from './services/platform-settings.service';
+import { FulfilmentRegistry } from './services/fulfilment.registry';
 import { PaymentProviderRegistry } from './providers/provider.registry';
 import { StripeProvider } from './providers/stripe.provider';
 import { PseProvider } from './providers/pse.provider';
@@ -29,10 +30,11 @@ import { PaymentsController } from './payments.controller';
   providers: [
     PaymentsService,
     PlatformSettingsService,
+    FulfilmentRegistry,
     PaymentProviderRegistry,
     StripeProvider,
     PseProvider,
   ],
-  exports: [PaymentsService, PlatformSettingsService],
+  exports: [PaymentsService, PlatformSettingsService, FulfilmentRegistry],
 })
 export class PaymentsModule {}

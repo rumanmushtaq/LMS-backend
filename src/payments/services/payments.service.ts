@@ -17,6 +17,7 @@ import { PlatformSettingsService } from './platform-settings.service';
 import { PaymentProviderRegistry } from '../providers/provider.registry';
 import { PaymentInstruction } from '../providers/payment-provider.interface';
 import { splitCommission } from '../money';
+import { FulfilmentRegistry } from './fulfilment.registry';
 
 export interface StartPaymentInput {
   buyerId: string;
@@ -51,6 +52,7 @@ export class PaymentsService {
     private readonly paymentModel: Model<PaymentDocument>,
     private readonly settings: PlatformSettingsService,
     private readonly registry: PaymentProviderRegistry,
+    private readonly fulfilment: FulfilmentRegistry,
   ) {}
 
   /** Payment methods to offer this buyer, in admin-configured order. */
@@ -233,7 +235,15 @@ export class PaymentsService {
     const state = await provider.parseWebhook(rawBody, headers);
     if (!state) return null;
 
-    return this.applyProviderState(state);
+    const settled = await this.applyProviderState(state);
+
+    // Hand off to whichever area this paid for. Only reached when this call is
+    // what settled the payment, so a redelivered webhook cannot fulfil twice.
+    if (settled) {
+      await this.fulfilment.fulfil(settled);
+    }
+
+    return settled;
   }
 
   /** Has this reference been paid for? Used to gate access to what was bought. */
