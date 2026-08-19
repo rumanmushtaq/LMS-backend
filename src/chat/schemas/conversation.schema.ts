@@ -9,7 +9,10 @@ export type ConversationDocument = HydratedDocument<Conversation>;
 @Schema({ timestamps: true })
 export class Conversation extends Document {
   @ApiProperty({ description: 'Participants in the conversation' })
-  @Prop({ type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], required: true })
+  @Prop({
+    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    required: true,
+  })
   participants: mongoose.Types.ObjectId[];
 
   @ApiProperty({ description: 'Is the conversation blocked?' })

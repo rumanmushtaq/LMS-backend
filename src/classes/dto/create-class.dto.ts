@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsDateString, IsMongoId, IsEnum } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsDateString,
+  IsMongoId,
+  IsEnum,
+} from 'class-validator';
 import { ClassStatus } from '../schemas/class.schema';
 
 export class CreateClassDto {
@@ -33,7 +40,10 @@ export class CreateClassDto {
   @IsDateString()
   endTime: string;
 
-  @ApiPropertyOptional({ description: 'Status of the class', enum: ClassStatus })
+  @ApiPropertyOptional({
+    description: 'Status of the class',
+    enum: ClassStatus,
+  })
   @IsOptional()
   @IsEnum(ClassStatus)
   status?: ClassStatus;
@@ -41,7 +51,9 @@ export class CreateClassDto {
 
 /** Used when a STUDENT requests a class from a specific tutor */
 export class RequestClassDto {
-  @ApiProperty({ description: 'The tutor/instructor ID to request a class from' })
+  @ApiProperty({
+    description: 'The tutor/instructor ID to request a class from',
+  })
   @IsNotEmpty()
   @IsMongoId()
   tutorId: string;
@@ -51,7 +63,9 @@ export class RequestClassDto {
   @IsString()
   title: string;
 
-  @ApiProperty({ description: 'What the student wants to learn / discussion topic' })
+  @ApiProperty({
+    description: 'What the student wants to learn / discussion topic',
+  })
   @IsNotEmpty()
   @IsString()
   description: string;
@@ -69,7 +83,10 @@ export class RequestClassDto {
 
 /** Used by a tutor when approving a class request */
 export class ApproveClassDto {
-  @ApiPropertyOptional({ description: 'Meeting link to share with the student (Zoom, Google Meet, etc.)' })
+  @ApiPropertyOptional({
+    description:
+      'Meeting link to share with the student (Zoom, Google Meet, etc.)',
+  })
   @IsOptional()
   @IsString()
   meetingLink?: string;
@@ -77,7 +94,9 @@ export class ApproveClassDto {
 
 /** Used by a tutor when declining a class request */
 export class DeclineClassDto {
-  @ApiPropertyOptional({ description: 'Reason for declining the class request' })
+  @ApiPropertyOptional({
+    description: 'Reason for declining the class request',
+  })
   @IsOptional()
   @IsString()
   declineReason?: string;

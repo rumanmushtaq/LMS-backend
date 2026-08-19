@@ -12,20 +12,36 @@ const STUDENT = 'student-1';
 const OUTSIDER = 'student-9';
 
 function makeService() {
-  const findByIdAndDelete = jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({}) });
+  const findByIdAndDelete = jest
+    .fn()
+    .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) });
   const classSessionModel: any = { findByIdAndDelete };
-  const vimeoService: any = { deleteLiveEvent: jest.fn().mockResolvedValue({}) };
+  const vimeoService: any = {
+    deleteLiveEvent: jest.fn().mockResolvedValue({}),
+  };
   const chatService: any = { addParticipant: jest.fn().mockResolvedValue({}) };
-  const chatGateway: any = { emitToConversation: jest.fn(), emitToUsers: jest.fn() };
+  const chatGateway: any = {
+    emitToConversation: jest.fn(),
+    emitToUsers: jest.fn(),
+  };
+  // startLive alerts enrolled students that the class has begun, so the
+  // notifications collaborator has to be real enough to be called.
+  const notificationsService: any = { create: jest.fn().mockResolvedValue({}) };
   const service = new ClassesService(
     classSessionModel,
     {} as any,
     vimeoService,
     chatService,
     chatGateway,
-    {} as any,
+    notificationsService,
   );
-  return { service, findByIdAndDelete, vimeoService };
+  return {
+    service,
+    findByIdAndDelete,
+    vimeoService,
+    chatGateway,
+    notificationsService,
+  };
 }
 
 const fakeClass = (over: any = {}) => ({
@@ -63,9 +79,9 @@ describe('startLive (tutor starts the class)', () => {
   it('a different tutor cannot start it (403)', async () => {
     const { service } = makeService();
     jest.spyOn(service, 'findOne').mockResolvedValue(fakeClass() as any);
-    await expect(service.startLive('class-1', OTHER_TUTOR)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.startLive('class-1', OTHER_TUTOR),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('cannot start before the live session is set up (400)', async () => {
@@ -75,6 +91,50 @@ describe('startLive (tutor starts the class)', () => {
     await expect(service.startLive('class-1', TUTOR)).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+
+  it('alerts enrolled students that the class is live', async () => {
+    const { service, notificationsService, chatGateway } = makeService();
+    const cls = fakeClass();
+    jest.spyOn(service, 'findOne').mockResolvedValue(cls as any);
+
+    await service.startLive('class-1', TUTOR);
+
+    // Persisted, so a student who logs in mid-class still sees it, and pushed
+    // over the app-wide channel so students not on the live page are reached.
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: STUDENT,
+        actionPayload: expect.objectContaining({ kind: 'class_live' }),
+      }),
+    );
+    expect(chatGateway.emitToUsers).toHaveBeenCalledWith(
+      [STUDENT],
+      'newNotification',
+      expect.objectContaining({
+        actionPayload: expect.objectContaining({ kind: 'class_live' }),
+      }),
+    );
+  });
+
+  it('does not re-alert when an already-live class is started again', async () => {
+    const { service, notificationsService } = makeService();
+    // A double-click on "Go Live" must not notify every student twice.
+    const cls = fakeClass({
+      liveSession: {
+        vimeoEventId: 'vimeo-1',
+        embedUrl: 'https://embed',
+        conversationId: null,
+        status: LiveStatus.LIVE,
+        startedAt: new Date(),
+        endedAt: null,
+      },
+    });
+    jest.spyOn(service, 'findOne').mockResolvedValue(cls as any);
+
+    await service.startLive('class-1', TUTOR);
+
+    expect(notificationsService.create).not.toHaveBeenCalled();
   });
 });
 
@@ -123,9 +183,9 @@ describe('endLive (tutor ends the class)', () => {
   it('a non-owner cannot end it (403)', async () => {
     const { service } = makeService();
     jest.spyOn(service, 'findOne').mockResolvedValue(fakeClass() as any);
-    await expect(service.endLive('class-1', OTHER_TUTOR)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.endLive('class-1', OTHER_TUTOR),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
 
@@ -148,9 +208,9 @@ describe('remove (admin/owner deletes the class)', () => {
   it('a different tutor cannot delete it', async () => {
     const { service, findByIdAndDelete } = makeService();
     jest.spyOn(service, 'findOne').mockResolvedValue(fakeClass() as any);
-    await expect(service.remove('class-1', OTHER_TUTOR, false)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.remove('class-1', OTHER_TUTOR, false),
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(findByIdAndDelete).not.toHaveBeenCalled();
   });
 });
@@ -168,8 +228,8 @@ describe('setupLive (provisioning guardrails)', () => {
   it('a non-owner cannot set up the live session (403)', async () => {
     const { service } = makeService();
     jest.spyOn(service, 'findOne').mockResolvedValue(fakeClass() as any);
-    await expect(service.setupLive('class-1', OTHER_TUTOR)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.setupLive('class-1', OTHER_TUTOR),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

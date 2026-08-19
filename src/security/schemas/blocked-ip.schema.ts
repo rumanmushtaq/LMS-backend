@@ -48,5 +48,8 @@ export const BlockedIpSchema = SchemaFactory.createForClass(BlockedIp);
 
 BlockedIpSchema.index(
   { expiresAt: 1 },
-  { expireAfterSeconds: 0, partialFilterExpression: { expiresAt: { $type: 'date' } } },
+  {
+    expireAfterSeconds: 0,
+    partialFilterExpression: { expiresAt: { $type: 'date' } },
+  },
 );

@@ -17,7 +17,19 @@ async function bootstrap() {
   });
 
   // Apply body parsers with a 110MB limit (multer handles multipart itself)
-  app.use(express.json({ limit: '110mb' }));
+  // Keep the untouched request body around for webhook signature checks.
+  // Providers sign the exact bytes they sent; re-serialising the parsed JSON
+  // produces a different string and every signature check would fail.
+  app.use(
+    express.json({
+      limit: '110mb',
+      verify: (req: any, _res, buf: Buffer) => {
+        if (req.originalUrl?.includes('/payments/webhook/')) {
+          req.rawBody = buf;
+        }
+      },
+    }),
+  );
   app.use(express.urlencoded({ limit: '110mb', extended: true }));
 
   // One hop we own (the VPS reverse proxy). Without this, req.ip is the

@@ -3,7 +3,9 @@ import { IpBlockService } from './ip-block.service';
 /** Builds the .find().select().lean() chain the refresh path uses. */
 const findChain = (docs: any[]) => ({
   find: jest.fn().mockReturnValue({
-    select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(docs) }),
+    select: jest
+      .fn()
+      .mockReturnValue({ lean: jest.fn().mockResolvedValue(docs) }),
   }),
 });
 
@@ -76,17 +78,23 @@ describe('IpBlockService.findBlock', () => {
 
 describe('IpBlockService.block / unblock', () => {
   it('blocks an IPv6 address under its /64 key and writes an audit entry', async () => {
-    const findOneAndUpdate = jest.fn().mockResolvedValue({ _id: 'x', key: '2001:db8:aa:bb::/64' });
+    const findOneAndUpdate = jest
+      .fn()
+      .mockResolvedValue({ _id: 'x', key: '2001:db8:aa:bb::/64' });
     const create = jest.fn().mockResolvedValue({});
     const blockedIpModel = {
       findOneAndUpdate,
       find: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+        select: jest
+          .fn()
+          .mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
       }),
     };
     const whitelistModel = {
       find: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+        select: jest
+          .fn()
+          .mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
       }),
     };
     const service = new IpBlockService(

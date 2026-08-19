@@ -23,11 +23,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { blockKeyForIp, parseCidr, resolveClientIp } from '../../common/utils';
-import {
-  User,
-  UserDocument,
-  UserRole,
-} from '../../users/schemas/user.schema';
+import { User, UserDocument, UserRole } from '../../users/schemas/user.schema';
 import {
   AddWhitelistDto,
   AuditQueryDto,
@@ -114,7 +110,10 @@ export class SecurityAdminController {
       ...activity,
       activeBlocks,
       autoBlocks: autoBlocks24h,
-      enforced: this.configService.get<boolean>('security.enforceIpBlocks', false),
+      enforced: this.configService.get<boolean>(
+        'security.enforceIpBlocks',
+        false,
+      ),
     };
   }
 
@@ -126,7 +125,9 @@ export class SecurityAdminController {
   }
 
   @Get('ips')
-  @ApiOperation({ summary: 'Paginated IP list with per-IP stats and block status' })
+  @ApiOperation({
+    summary: 'Paginated IP list with per-IP stats and block status',
+  })
   async listIps(@Query() query: ListIpsQueryDto) {
     const result = await this.ipActivityService.listIps({
       page: query.page,
@@ -150,7 +151,9 @@ export class SecurityAdminController {
   }
 
   @Get('ips/:ip')
-  @ApiOperation({ summary: 'Activity timeline and associated accounts for one IP' })
+  @ApiOperation({
+    summary: 'Activity timeline and associated accounts for one IP',
+  })
   async ipDetail(@Param('ip') ip: string, @Query('hours') hours = '168') {
     const windowHours = Math.min(parseInt(hours, 10) || 168, 24 * 30);
     const detail = await this.ipActivityService.ipDetail(ip, windowHours);
@@ -289,7 +292,9 @@ export class SecurityAdminController {
     @Param('key') key: string,
   ) {
     const decoded = decodeURIComponent(key).toLowerCase();
-    const removed = await this.whitelistModel.findOneAndDelete({ key: decoded });
+    const removed = await this.whitelistModel.findOneAndDelete({
+      key: decoded,
+    });
     if (!removed) throw new NotFoundException('Not on the whitelist');
 
     await this.auditModel.create({
@@ -305,7 +310,9 @@ export class SecurityAdminController {
   }
 
   @Get('audit')
-  @ApiOperation({ summary: 'Append-only audit trail (search by key or incident id)' })
+  @ApiOperation({
+    summary: 'Append-only audit trail (search by key or incident id)',
+  })
   async audit(@Query() query: AuditQueryDto) {
     const filter: Record<string, unknown> = {};
     if (query.search) {

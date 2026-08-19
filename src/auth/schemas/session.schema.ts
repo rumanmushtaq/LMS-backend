@@ -22,15 +22,21 @@ export class Session {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
-  @ApiProperty({ description: 'Hash of the current refresh token for this session' })
+  @ApiProperty({
+    description: 'Hash of the current refresh token for this session',
+  })
   @Prop({ type: String, default: null })
   refreshTokenHash: string | null;
 
-  @ApiProperty({ description: 'Last time the user performed meaningful activity' })
+  @ApiProperty({
+    description: 'Last time the user performed meaningful activity',
+  })
   @Prop({ type: Date, required: true })
   lastActivityAt: Date;
 
-  @ApiProperty({ description: 'Hard ceiling on session lifetime, regardless of activity' })
+  @ApiProperty({
+    description: 'Hard ceiling on session lifetime, regardless of activity',
+  })
   @Prop({ type: Date, required: true })
   absoluteExpiresAt: Date;
 
@@ -38,10 +44,18 @@ export class Session {
   @Prop({ type: Date, default: null })
   revokedAt: Date | null;
 
-  @ApiProperty({ description: 'Why the session ended — for audit and debugging' })
+  @ApiProperty({
+    description: 'Why the session ended — for audit and debugging',
+  })
   @Prop({
     type: String,
-    enum: ['logout', 'idle_timeout', 'absolute_timeout', 'reuse_detected', 'password_change'],
+    enum: [
+      'logout',
+      'idle_timeout',
+      'absolute_timeout',
+      'reuse_detected',
+      'password_change',
+    ],
     default: null,
   })
   revokedReason: string | null;

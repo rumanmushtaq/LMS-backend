@@ -44,7 +44,9 @@ export function resolveClientIp(
   options: { trustCloudflare: boolean },
 ): string | undefined {
   if (options.trustCloudflare) {
-    const cf = normalizeIp(firstHeaderValue(source.headers['cf-connecting-ip']));
+    const cf = normalizeIp(
+      firstHeaderValue(source.headers['cf-connecting-ip']),
+    );
     if (cf) return cf;
   }
   return normalizeIp(source.remoteAddress);
@@ -60,7 +62,8 @@ function expandIpv6(ip: string): number[] | null {
   if (v4Match) {
     const octets = v4Match[2].split('.').map(Number);
     ip = `${v4Match[1]}:${((octets[0] << 8) | octets[1]).toString(16)}:${(
-      (octets[2] << 8) | octets[3]
+      (octets[2] << 8) |
+      octets[3]
     ).toString(16)}`;
   }
 
@@ -68,11 +71,7 @@ function expandIpv6(ip: string): number[] | null {
   const head = halves[0] ? halves[0].split(':') : [];
   const tail = halves.length > 1 && halves[1] ? halves[1].split(':') : [];
   const missing = 8 - head.length - tail.length;
-  const groups = [
-    ...head,
-    ...Array(Math.max(missing, 0)).fill('0'),
-    ...tail,
-  ];
+  const groups = [...head, ...Array(Math.max(missing, 0)).fill('0'), ...tail];
   if (groups.length !== 8) return null;
   return groups.map((g) => parseInt(g, 16));
 }
@@ -101,9 +100,8 @@ export function blockKeyForIp(ip: string): string | undefined {
 function ipv4ToInt(ip: string): number | null {
   if (isIP(ip) !== 4) return null;
   return (
-    ip
-      .split('.')
-      .reduce((acc, octet) => acc * 256 + parseInt(octet, 10), 0) >>> 0
+    ip.split('.').reduce((acc, octet) => acc * 256 + parseInt(octet, 10), 0) >>>
+    0
   );
 }
 
@@ -126,8 +124,7 @@ export function parseCidr(cidr: string): ParsedCidr | null {
   if (!ip) return null;
   const version = isIP(ip) as 4 | 6;
   const maxPrefix = version === 4 ? 32 : 128;
-  const prefix =
-    rawPrefix === undefined ? maxPrefix : parseInt(rawPrefix, 10);
+  const prefix = rawPrefix === undefined ? maxPrefix : parseInt(rawPrefix, 10);
   if (!Number.isInteger(prefix) || prefix < 0 || prefix > maxPrefix) {
     return null;
   }
@@ -142,7 +139,9 @@ export function parseCidr(cidr: string): ParsedCidr | null {
   const asBig = ipv6ToBigInt(ip);
   if (asBig === null) return null;
   const mask =
-    prefix === 0 ? 0n : ((1n << 128n) - 1n) ^ ((1n << BigInt(128 - prefix)) - 1n);
+    prefix === 0
+      ? 0n
+      : ((1n << 128n) - 1n) ^ ((1n << BigInt(128 - prefix)) - 1n);
   return { version: 6, base: asBig & mask, prefix };
 }
 
@@ -153,7 +152,7 @@ export function cidrContains(cidr: ParsedCidr, ip: string): boolean {
     const asInt = ipv4ToInt(normalized);
     if (asInt === null) return false;
     const mask = cidr.prefix === 0 ? 0 : (~0 << (32 - cidr.prefix)) >>> 0;
-    return ((asInt & mask) >>> 0) === cidr.base;
+    return (asInt & mask) >>> 0 === cidr.base;
   }
   const asBig = ipv6ToBigInt(normalized);
   if (asBig === null) return false;

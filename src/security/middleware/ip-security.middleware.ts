@@ -31,7 +31,10 @@ export class IpSecurityMiddleware implements NestMiddleware {
     private readonly ipBlockService: IpBlockService,
     private readonly ipActivityService: IpActivityService,
   ) {
-    this.enforce = this.configService.get<boolean>('security.enforceIpBlocks', false);
+    this.enforce = this.configService.get<boolean>(
+      'security.enforceIpBlocks',
+      false,
+    );
     this.trustCloudflare = this.configService.get<boolean>(
       'security.trustCloudflare',
       false,

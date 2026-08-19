@@ -15,6 +15,7 @@ import {
   securityConfig,
   imagekitConfig,
   stripeConfig,
+  pseConfig,
   vimeoConfig,
   validateEnv,
 } from './config';
@@ -44,6 +45,7 @@ import { ChatModule } from './chat/chat.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TutorMaterialsModule } from './tutor-materials/tutor-materials.module';
 import { ClassesModule } from './classes/classes.module';
+import { PaymentsModule } from './payments/payments.module';
 import { SecurityModule } from './security/security.module';
 import { IpSecurityMiddleware } from './security/middleware/ip-security.middleware';
 
@@ -62,6 +64,7 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
         securityConfig,
         imagekitConfig,
         stripeConfig,
+        pseConfig,
         vimeoConfig,
       ],
       validate: validateEnv,
@@ -100,6 +103,7 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
     NotificationsModule,
     TutorMaterialsModule,
     ClassesModule,
+    PaymentsModule,
     SecurityModule,
   ],
   providers: [

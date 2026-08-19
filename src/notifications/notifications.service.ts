@@ -1,17 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Notification, NotificationDocument } from './schemas/notification.schema';
+import {
+  Notification,
+  NotificationDocument,
+} from './schemas/notification.schema';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { GetNotificationsDto, SortOrder } from './dto/get-notifications.dto';
 
 @Injectable()
 export class NotificationsService {
   constructor(
-    @InjectModel(Notification.name) private notificationModel: Model<NotificationDocument>,
+    @InjectModel(Notification.name)
+    private notificationModel: Model<NotificationDocument>,
   ) {}
 
-  async create(createNotificationDto: CreateNotificationDto): Promise<Notification> {
+  async create(
+    createNotificationDto: CreateNotificationDto,
+  ): Promise<Notification> {
     const createdNotification = new this.notificationModel({
       ...createNotificationDto,
       userId: new Types.ObjectId(createNotificationDto.userId),
@@ -24,7 +30,7 @@ export class NotificationsService {
     const skip = (page - 1) * limit;
 
     const filter: any = { userId: new Types.ObjectId(userId) };
-    
+
     if (isRead !== undefined) {
       filter.read = isRead === 'true';
     }

@@ -48,7 +48,7 @@ export type UserDocument = HydratedDocument<User>;
       return ret;
     },
   },
-  toObject: { virtuals: true }
+  toObject: { virtuals: true },
 })
 export class User extends Document {
   @ApiProperty({ description: 'User email address' })

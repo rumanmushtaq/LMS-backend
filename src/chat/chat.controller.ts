@@ -1,4 +1,16 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Req, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+  Query,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { ChatService } from './chat.service';
@@ -31,7 +43,10 @@ export class ChatController {
     conversationId: string,
   ): Promise<void> {
     if (req?.user?.role === UserRole.ADMIN) return;
-    await this.chatService.assertParticipant(conversationId, this.userIdOf(req));
+    await this.chatService.assertParticipant(
+      conversationId,
+      this.userIdOf(req),
+    );
   }
 
   @ApiOperation({ summary: 'Get all conversations for the logged in user' })
@@ -50,11 +65,19 @@ export class ChatController {
     );
   }
 
-  @ApiOperation({ summary: 'Initialize or find a conversation with another user' })
+  @ApiOperation({
+    summary: 'Initialize or find a conversation with another user',
+  })
   @Post('conversations')
-  async initConversation(@Req() req: Request & { user: any }, @Body() body: { targetUserId: string }) {
+  async initConversation(
+    @Req() req: Request & { user: any },
+    @Body() body: { targetUserId: string },
+  ) {
     const userId = req?.user?._id || req?.user?.userId;
-    return this.chatService.findOrCreateConversation([userId, body.targetUserId]);
+    return this.chatService.findOrCreateConversation([
+      userId,
+      body.targetUserId,
+    ]);
   }
 
   @ApiOperation({ summary: 'Get messages for a conversation' })
@@ -74,7 +97,9 @@ export class ChatController {
     );
   }
 
-  @ApiOperation({ summary: 'Mark every message from the other participants as read' })
+  @ApiOperation({
+    summary: 'Mark every message from the other participants as read',
+  })
   @Post('conversations/:id/read')
   @HttpCode(HttpStatus.OK)
   async markConversationRead(
@@ -102,7 +127,10 @@ export class ChatController {
 
   @ApiOperation({ summary: 'Block a conversation' })
   @Post('conversations/:id/block')
-  async blockConversation(@Param('id') conversationId: string, @Req() req: Request & { user: any }) {
+  async blockConversation(
+    @Param('id') conversationId: string,
+    @Req() req: Request & { user: any },
+  ) {
     const userId = this.userIdOf(req);
     await this.assertCanModerate(req, conversationId);
 
@@ -111,7 +139,10 @@ export class ChatController {
 
   @ApiOperation({ summary: 'Unblock a conversation' })
   @Post('conversations/:id/unblock')
-  async unblockConversation(@Param('id') conversationId: string, @Req() req: Request & { user: any }) {
+  async unblockConversation(
+    @Param('id') conversationId: string,
+    @Req() req: Request & { user: any },
+  ) {
     const userId = this.userIdOf(req);
     await this.assertCanModerate(req, conversationId);
 
@@ -120,14 +151,16 @@ export class ChatController {
 
   @ApiOperation({ summary: 'Delete a conversation' })
   @Delete('conversations/:id')
-  async deleteConversation(@Param('id') conversationId: string, @Req() req: Request & { user: any }) {
+  async deleteConversation(
+    @Param('id') conversationId: string,
+    @Req() req: Request & { user: any },
+  ) {
     await this.assertCanModerate(req, conversationId);
 
     return this.chatService.deleteConversation(conversationId);
   }
 
   // --- Admin Endpoints ---
-
 
   @ApiOperation({ summary: 'Admin: Get every conversation in the system' })
   @Get('admin/conversations')

@@ -40,10 +40,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
    * where a refresh can be rejected — and so the checks run in a guaranteed
    * order against the session record.
    */
-  async validate(
-    req: Request,
-    payload: JwtPayload,
-  ): Promise<RefreshContext> {
+  async validate(req: Request, payload: JwtPayload): Promise<RefreshContext> {
     const refreshToken = (req.body as { refreshToken?: string })?.refreshToken;
 
     if (!refreshToken) {
@@ -54,9 +51,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
     // than falling back to the old user-level refresh hash, which had no idle
     // enforcement at all.
     if (!payload.sid) {
-      throw new UnauthorizedException(
-        'Session expired. Please log in again.',
-      );
+      throw new UnauthorizedException('Session expired. Please log in again.');
     }
 
     const user = await this.userModel.findById(payload.sub).exec();

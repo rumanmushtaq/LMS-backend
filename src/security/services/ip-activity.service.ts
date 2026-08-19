@@ -7,10 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { normalizeIp } from '../../common/utils';
-import {
-  IpActivity,
-  IpActivityDocument,
-} from '../schemas/ip-activity.schema';
+import { IpActivity, IpActivityDocument } from '../schemas/ip-activity.schema';
 
 interface BucketDelta {
   ip: string;

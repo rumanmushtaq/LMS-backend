@@ -1,18 +1,28 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Conversation, ConversationDocument } from './schemas/conversation.schema';
+import {
+  Conversation,
+  ConversationDocument,
+} from './schemas/conversation.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
 
 @Injectable()
 export class ChatService {
   constructor(
-    @InjectModel(Conversation.name) private conversationModel: Model<ConversationDocument>,
+    @InjectModel(Conversation.name)
+    private conversationModel: Model<ConversationDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
   ) {}
 
-  async findOrCreateConversation(participants: string[]): Promise<ConversationDocument> {
-    const participantIds = participants.map(p => new Types.ObjectId(p));
+  async findOrCreateConversation(
+    participants: string[],
+  ): Promise<ConversationDocument> {
+    const participantIds = participants.map((p) => new Types.ObjectId(p));
     let conversation = await this.conversationModel.findOne({
       participants: { $all: participantIds, $size: participantIds.length },
     });
@@ -26,9 +36,13 @@ export class ChatService {
     return conversation;
   }
 
-  async getConversationById(conversationId: string): Promise<ConversationDocument | null> {
+  async getConversationById(
+    conversationId: string,
+  ): Promise<ConversationDocument | null> {
     if (!Types.ObjectId.isValid(conversationId)) return null;
-    return this.conversationModel.findById(new Types.ObjectId(conversationId)).exec();
+    return this.conversationModel
+      .findById(new Types.ObjectId(conversationId))
+      .exec();
   }
 
   /**
@@ -91,7 +105,9 @@ export class ChatService {
     if (!isParticipant) {
       // Same shape as "not found" would be safer against id probing, but a
       // distinct 403 is far easier to debug and the ids are not guessable.
-      throw new ForbiddenException('You are not a participant in this conversation');
+      throw new ForbiddenException(
+        'You are not a participant in this conversation',
+      );
     }
 
     return conversation;
@@ -102,13 +118,19 @@ export class ChatService {
    * opens. Falls back to an empty string rather than throwing — a missing
    * name must never stop a message being delivered.
    */
-  async getParticipantName(conversationId: string, userId: string): Promise<string> {
+  async getParticipantName(
+    conversationId: string,
+    userId: string,
+  ): Promise<string> {
     const conversation = await this.conversationModel
       .findById(conversationId)
-      .populate<{ participants: Array<{ _id: Types.ObjectId; firstName?: string; lastName?: string }> }>(
-        'participants',
-        'firstName lastName',
-      )
+      .populate<{
+        participants: Array<{
+          _id: Types.ObjectId;
+          firstName?: string;
+          lastName?: string;
+        }>;
+      }>('participants', 'firstName lastName')
       .lean()
       .exec();
 
@@ -117,7 +139,10 @@ export class ChatService {
     );
     if (!participant) return '';
 
-    return [participant.firstName, participant.lastName].filter(Boolean).join(' ').trim();
+    return [participant.firstName, participant.lastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
   }
 
   /** Proves the caller may act on a message, via the conversation it belongs to. */
@@ -138,7 +163,9 @@ export class ChatService {
   }
 
   /** Create a fresh (possibly group) conversation — used for class Q&A rooms. */
-  async createConversation(participants: string[]): Promise<ConversationDocument> {
+  async createConversation(
+    participants: string[],
+  ): Promise<ConversationDocument> {
     return this.conversationModel.create({
       participants: participants.map((p) => new Types.ObjectId(p)),
     });
@@ -152,7 +179,11 @@ export class ChatService {
     );
   }
 
-  async saveMessage(conversationId: string, senderId: string, content: string): Promise<MessageDocument> {
+  async saveMessage(
+    conversationId: string,
+    senderId: string,
+    content: string,
+  ): Promise<MessageDocument> {
     const message = await this.messageModel.create({
       conversationId: new Types.ObjectId(conversationId),
       senderId: new Types.ObjectId(senderId),
@@ -180,7 +211,9 @@ export class ChatService {
       this.messageModel.aggregate([
         { $match: { conversationId: { $in: conversationIds } } },
         { $sort: { createdAt: -1, _id: -1 } },
-        { $group: { _id: '$conversationId', lastMessage: { $first: '$$ROOT' } } },
+        {
+          $group: { _id: '$conversationId', lastMessage: { $first: '$$ROOT' } },
+        },
       ]),
       this.messageModel.aggregate([
         {
@@ -243,18 +276,27 @@ export class ChatService {
     return { conversationId, updated: result.modifiedCount };
   }
 
-  async getMessages(conversationId: string, skip = 0, limit = 50): Promise<MessageDocument[]> {
-    return this.messageModel
-      .find({ conversationId: new Types.ObjectId(conversationId) })
-      // _id breaks ties: two messages saved in the same millisecond would
-      // otherwise come back in an arbitrary order.
-      .sort({ createdAt: 1, _id: 1 })
-      .skip(skip)
-      .limit(limit)
-      .exec();
+  async getMessages(
+    conversationId: string,
+    skip = 0,
+    limit = 50,
+  ): Promise<MessageDocument[]> {
+    return (
+      this.messageModel
+        .find({ conversationId: new Types.ObjectId(conversationId) })
+        // _id breaks ties: two messages saved in the same millisecond would
+        // otherwise come back in an arbitrary order.
+        .sort({ createdAt: 1, _id: 1 })
+        .skip(skip)
+        .limit(limit)
+        .exec()
+    );
   }
 
-  async blockConversation(conversationId: string, userId: string): Promise<ConversationDocument> {
+  async blockConversation(
+    conversationId: string,
+    userId: string,
+  ): Promise<ConversationDocument> {
     const conversation = await this.conversationModel.findById(conversationId);
     if (!conversation) throw new NotFoundException('Conversation not found');
 
@@ -263,7 +305,10 @@ export class ChatService {
     return conversation.save();
   }
 
-  async unblockConversation(conversationId: string, userId: string): Promise<ConversationDocument> {
+  async unblockConversation(
+    conversationId: string,
+    userId: string,
+  ): Promise<ConversationDocument> {
     const conversation = await this.conversationModel.findById(conversationId);
     if (!conversation) throw new NotFoundException('Conversation not found');
 
@@ -277,11 +322,16 @@ export class ChatService {
   }
 
   async deleteConversation(conversationId: string): Promise<void> {
-    await this.messageModel.deleteMany({ conversationId: new Types.ObjectId(conversationId) });
+    await this.messageModel.deleteMany({
+      conversationId: new Types.ObjectId(conversationId),
+    });
     await this.conversationModel.findByIdAndDelete(conversationId);
   }
 
-  async flagMessage(messageId: string, reason: string): Promise<MessageDocument> {
+  async flagMessage(
+    messageId: string,
+    reason: string,
+  ): Promise<MessageDocument> {
     const message = await this.messageModel.findById(messageId);
     if (!message) throw new NotFoundException('Message not found');
 
@@ -291,8 +341,6 @@ export class ChatService {
   }
 
   // --- Admin Methods ---
-
-
 
   async getFlaggedMessages(skip = 0, limit = 50): Promise<any[]> {
     return this.messageModel

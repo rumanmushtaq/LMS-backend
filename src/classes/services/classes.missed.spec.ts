@@ -98,7 +98,9 @@ describe('sweepMissedClasses — detection', () => {
   it('marks overdue classes MISSED and stamps missedAt, filtered to still-SCHEDULED (idempotent)', async () => {
     const now = new Date('2026-01-01T12:00:00Z');
     const { service, updateMany } = buildService({
-      overdue: [{ _id: 'c1', tutorId: TUTOR_A, title: 'Algebra', students: [] }],
+      overdue: [
+        { _id: 'c1', tutorId: TUTOR_A, title: 'Algebra', students: [] },
+      ],
       missedCountByTutor: { [TUTOR_A]: 1 },
     });
     await service.sweepMissedClasses(now);
@@ -112,7 +114,12 @@ describe('sweepMissedClasses — detection', () => {
   it('notifies every enrolled student their class was missed', async () => {
     const { service, notify } = buildService({
       overdue: [
-        { _id: 'c1', tutorId: TUTOR_A, title: 'Algebra', students: ['s1', 's2'] },
+        {
+          _id: 'c1',
+          tutorId: TUTOR_A,
+          title: 'Algebra',
+          students: ['s1', 's2'],
+        },
       ],
       missedCountByTutor: { [TUTOR_A]: 1 },
     });

@@ -106,7 +106,9 @@ export class SessionService {
 
     if (session.absoluteExpiresAt.getTime() <= now.getTime()) {
       await this.revoke(session, 'absolute_timeout');
-      throw new UnauthorizedException('Session has expired. Please log in again.');
+      throw new UnauthorizedException(
+        'Session has expired. Please log in again.',
+      );
     }
 
     if (this.isIdle(session, now)) {
@@ -242,7 +244,13 @@ export class SessionService {
     await this.sessionModel
       .updateOne(
         { _id: id, revokedAt: null },
-        { $set: { revokedAt: now, revokedReason: reason, refreshTokenHash: null } },
+        {
+          $set: {
+            revokedAt: now,
+            revokedReason: reason,
+            refreshTokenHash: null,
+          },
+        },
       )
       .exec();
 
@@ -262,7 +270,13 @@ export class SessionService {
     await this.sessionModel
       .updateMany(
         { userId: new Types.ObjectId(userId.toString()), revokedAt: null },
-        { $set: { revokedAt: now, revokedReason: reason, refreshTokenHash: null } },
+        {
+          $set: {
+            revokedAt: now,
+            revokedReason: reason,
+            refreshTokenHash: null,
+          },
+        },
       )
       .exec();
   }

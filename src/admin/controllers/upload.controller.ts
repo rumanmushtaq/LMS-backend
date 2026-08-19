@@ -28,7 +28,10 @@ export class UploadController {
   @Post('video')
   @UseInterceptors(FileInterceptor('video'))
   async uploadVideo(@UploadedFile() file: Express.Multer.File) {
-    const url = await this.uploadService.uploadImage(file, 'hero-banners-videos');
+    const url = await this.uploadService.uploadImage(
+      file,
+      'hero-banners-videos',
+    );
     return { url };
   }
 }
