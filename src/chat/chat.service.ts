@@ -281,16 +281,23 @@ export class ChatService {
     skip = 0,
     limit = 50,
   ): Promise<MessageDocument[]> {
-    return (
-      this.messageModel
-        .find({ conversationId: new Types.ObjectId(conversationId) })
-        // _id breaks ties: two messages saved in the same millisecond would
-        // otherwise come back in an arbitrary order.
-        .sort({ createdAt: 1, _id: 1 })
-        .skip(skip)
-        .limit(limit)
-        .exec()
-    );
+    // A chat must open on its most RECENT messages, so fetch newest-first
+    // (skip walks backwards through history for older-message pagination),
+    // then return the page oldest→newest for top-to-bottom rendering.
+    //
+    // The previous ascending sort returned the OLDEST `limit` messages, so a
+    // conversation with more than `limit` messages opened on its beginning and
+    // never showed the latest message the list preview promised.
+    const messages = await this.messageModel
+      .find({ conversationId: new Types.ObjectId(conversationId) })
+      // _id breaks ties: two messages saved in the same millisecond would
+      // otherwise come back in an arbitrary order.
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .exec();
+
+    return messages.reverse();
   }
 
   async blockConversation(

@@ -139,3 +139,30 @@ describe('flagMessage (moderation)', () => {
     );
   });
 });
+
+describe('getMessages (opens on the newest messages)', () => {
+  it('fetches newest-first then returns the page oldest→newest', async () => {
+    const sortSpy = jest.fn().mockReturnThis();
+    const chainObj: any = {
+      sort: sortSpy,
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      // DB returns newest-first (createdAt desc); service must reverse it.
+      exec: jest.fn().mockResolvedValue([
+        { _id: 'm3', createdAt: '2026-01-03' },
+        { _id: 'm2', createdAt: '2026-01-02' },
+        { _id: 'm1', createdAt: '2026-01-01' },
+      ]),
+    };
+    const conversationModel: any = { findById: jest.fn() };
+    const messageModel: any = { find: jest.fn().mockReturnValue(chainObj) };
+    const service = new ChatService(conversationModel, messageModel);
+
+    const res = await service.getMessages('5dddddddddddddddddddddd4');
+
+    // queried newest-first
+    expect(sortSpy).toHaveBeenCalledWith({ createdAt: -1, _id: -1 });
+    // returned oldest → newest, so the last item is the most recent
+    expect(res.map((m: any) => m._id)).toEqual(['m1', 'm2', 'm3']);
+  });
+});
