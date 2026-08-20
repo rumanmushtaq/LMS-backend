@@ -123,7 +123,10 @@ export class EmailService {
     firstName: string,
     token: string,
   ): Promise<boolean> {
-    const resetUrl = `${this.frontendUrl}/auth/reset-password?token=${token}`;
+    // Must match a real route. This previously pointed at
+    // `/auth/reset-password`, which the web app does not have, so the button
+    // in every reset email 404'd.
+    const resetUrl = `${this.frontendUrl}/reset-password?token=${token}`;
 
     const templateData = {
       ...this.getBaseTemplateData(),
