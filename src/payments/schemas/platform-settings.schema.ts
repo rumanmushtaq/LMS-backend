@@ -57,7 +57,9 @@ export class PlatformSettings {
     description:
       'Payment provider ids offered to buyers, in display order (e.g. ["stripe","pse"])',
   })
-  @Prop({ type: [String], default: ['stripe'] })
+  // PSE is listed by default so the checkout shows it as "coming soon" while
+  // the Colombian PSP is being chosen. Remove an id here to hide it entirely.
+  @Prop({ type: [String], default: ['stripe', 'pse'] })
   enabledProviders: string[];
 
   @ApiProperty({ description: 'Admin who last changed these settings' })

@@ -156,8 +156,8 @@ export class ShopService implements OnModuleInit, FulfilmentHandler {
       buyerEmail,
     });
 
-    // Keep the provider reference on the order so support can trace it.
-    order.stripePaymentIntentId = payment.paymentId;
+    // Link the order to its ledger row so support can trace a charge.
+    order.paymentId = payment.paymentId;
     await order.save();
 
     return {
