@@ -122,6 +122,7 @@ export class ChatGateway
         // Resolved once here; handleConnection and every handler trust it.
         client.data.userId = payload.sub || payload.userId;
         client.data.sessionId = payload.sid;
+        client.data.role = payload.role;
         return next();
       } catch (e) {
         // Expired tokens are expected and recoverable — the client refreshes
@@ -153,6 +154,12 @@ export class ChatGateway
     sockets.push(client.id);
 
     client.join(`user_${userId}`); // Personal room for direct events
+    // Admins moderate every conversation, so they get a broadcast of all
+    // message activity (they are not participants in student↔tutor threads and
+    // would otherwise see nothing live).
+    if (client.data.role === 'admin') {
+      client.join('admins');
+    }
     this.server.emit('userStatusUpdate', { userId, online: true });
     this.logger.log(`Client connected: ${client.id} (User: ${userId})`);
   }
@@ -343,6 +350,16 @@ export class ChatGateway
         actionPayload: { conversationId, senderId, senderName },
       });
     }
+
+    // Moderation broadcast: every admin gets each message so their conversation
+    // list bumps and they see a notification, even for threads they are not in
+    // and have not opened. The admin UI ignores messages it sent itself.
+    this.server.to('admins').emit('moderationMessage', {
+      conversationId,
+      message,
+      senderId,
+      senderName,
+    });
 
     return message;
   }
