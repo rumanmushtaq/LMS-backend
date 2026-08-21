@@ -55,9 +55,24 @@ export class ShopOrder {
   @Prop({ required: true })
   totalAmount: number;
 
-  @ApiProperty({ description: 'Stripe PaymentIntent ID' })
-  @Prop({ required: true })
-  stripePaymentIntentId: string;
+  /**
+   * The Payment ledger row covering this order.
+   *
+   * Optional because the order is written *before* a payment is started: the
+   * payment cannot reference an order that does not exist yet, and requiring
+   * it here made every checkout fail Mongoose validation.
+   */
+  @ApiProperty({ description: 'Payment ledger id', required: false })
+  @Prop({ type: String, required: false, default: null })
+  paymentId: string | null;
+
+  /**
+   * @deprecated Superseded by `paymentId`. Kept so existing orders and the
+   * unique index they rely on keep working.
+   */
+  @ApiProperty({ description: 'Legacy Stripe PaymentIntent ID', required: false })
+  @Prop({ type: String, required: false, default: null })
+  stripePaymentIntentId: string | null;
 
   @ApiProperty({ description: 'Order status' })
   @Prop({ default: 'pending', enum: ['pending', 'paid', 'failed'] })
@@ -70,5 +85,14 @@ export class ShopOrder {
 
 export const ShopOrderSchema = SchemaFactory.createForClass(ShopOrder);
 ShopOrderSchema.index({ userId: 1 });
-ShopOrderSchema.index({ stripePaymentIntentId: 1 }, { unique: true });
+// Partial, because unpaid orders legitimately have no reference yet — a plain
+// unique index treats every null as the same value and rejects the second one.
+ShopOrderSchema.index(
+  { paymentId: 1 },
+  { unique: true, partialFilterExpression: { paymentId: { $type: 'string' } } },
+);
+ShopOrderSchema.index(
+  { stripePaymentIntentId: 1 },
+  { unique: true, partialFilterExpression: { stripePaymentIntentId: { $type: 'string' } } },
+);
 ShopOrderSchema.index({ createdAt: -1 });
