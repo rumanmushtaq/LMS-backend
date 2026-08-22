@@ -54,6 +54,19 @@ export class AdminController {
     return this.adminService.getDashboardStats();
   }
 
+  @Get('dashboard/growth')
+  @ApiOperation({
+    summary: 'Cumulative teacher vs student growth over the last N months',
+  })
+  @ApiResponse({ status: 200, description: 'Growth analytics retrieved' })
+  @ApiQuery({ name: 'months', required: false, type: Number })
+  async getGrowthAnalytics(@Query('months') months?: string) {
+    const n = Number(months);
+    return this.adminService.getGrowthAnalytics(
+      Number.isFinite(n) && n > 0 ? Math.min(n, 24) : 12,
+    );
+  }
+
   // =====================
   // USER MANAGEMENT
   // =====================

@@ -44,6 +44,19 @@ export interface DashboardStats {
   recentSignups: number;
 }
 
+export interface GrowthAnalytics {
+  /** Short month labels for the x-axis, oldest → newest. */
+  categories: string[];
+  /** Cumulative teacher totals at each month-end, aligned to `categories`. */
+  teachers: number[];
+  /** Cumulative student totals at each month-end, aligned to `categories`. */
+  students: number[];
+  /** New teachers registered in the most recent month (for the card trend). */
+  teacherDelta: number;
+  /** New students registered in the most recent month (for the card trend). */
+  studentDelta: number;
+}
+
 /**
  * A tutor as the admin screens consume it: the sanitised user document plus
  * the subject fields derived from `kycData`.
@@ -127,6 +140,101 @@ export class AdminService {
       pendingUsers,
       suspendedUsers,
       recentSignups,
+    };
+  }
+
+  /**
+   * Cumulative teacher vs student totals at the end of each of the last
+   * `months` months. The dashboard chart wants a growth curve, so we take the
+   * count of everyone who already existed before the window (the baseline) and
+   * add each month's new signups on top — every point is the running total as
+   * of that month, not that month's isolated intake.
+   */
+  async getGrowthAnalytics(months = 12): Promise<GrowthAnalytics> {
+    // Build the month buckets, oldest → newest, ending with the current month.
+    const now = new Date();
+    const windowStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (months - 1), 1),
+    );
+
+    const buckets: { key: string; label: string }[] = [];
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    for (let i = 0; i < months; i++) {
+      const d = new Date(
+        Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth() + i, 1),
+      );
+      const y = d.getUTCFullYear();
+      const m = d.getUTCMonth();
+      // Mark January (and the very first bucket) with a 2-digit year so a
+      // window that crosses a year boundary stays readable on the axis.
+      const label =
+        m === 0 || i === 0
+          ? `${monthNames[m]} '${String(y).slice(2)}`
+          : monthNames[m];
+      buckets.push({ key: `${y}-${String(m + 1).padStart(2, '0')}`, label });
+    }
+
+    // Per-role: baseline (everyone before the window) + new signups per month.
+    const perRole = async (role: UserRole) => {
+      const [baseline, monthly] = await Promise.all([
+        this.userModel.countDocuments({
+          role,
+          isDeleted: { $ne: true },
+          createdAt: { $lt: windowStart },
+        }),
+        this.userModel.aggregate<{ _id: string; count: number }>([
+          {
+            $match: {
+              role,
+              isDeleted: { $ne: true },
+              createdAt: { $gte: windowStart },
+            },
+          },
+          {
+            $group: {
+              _id: {
+                $dateToString: { format: '%Y-%m', date: '$createdAt' },
+              },
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+      ]);
+
+      const byMonth = new Map(monthly.map((r) => [r._id, r.count]));
+      let running = baseline;
+      const cumulative = buckets.map((b) => {
+        running += byMonth.get(b.key) ?? 0;
+        return running;
+      });
+      const delta = byMonth.get(buckets[buckets.length - 1].key) ?? 0;
+      return { cumulative, delta };
+    };
+
+    const [teacherSeries, studentSeries] = await Promise.all([
+      perRole(UserRole.TUTOR),
+      perRole(UserRole.STUDENT),
+    ]);
+
+    return {
+      categories: buckets.map((b) => b.label),
+      teachers: teacherSeries.cumulative,
+      students: studentSeries.cumulative,
+      teacherDelta: teacherSeries.delta,
+      studentDelta: studentSeries.delta,
     };
   }
 
