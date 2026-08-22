@@ -45,6 +45,13 @@ jobs:
             echo "Restarting PM2..."
             pm2 restart lms-backend || pm2 start dist/src/main.js --name lms-backend
 
+            # CloudPanel's reverse proxy serves the 'varona-api' process, NOT
+            # 'lms-backend'. Restarting only lms-backend built new code that
+            # nothing served — every "successful" deploy left the live API stale
+            # (this is why prod ran 14-day-old code). Reload the served process
+            # too, non-fatally in case it is ever renamed/removed.
+            pm2 restart varona-api --update-env || echo "⚠️ varona-api not found (skipping)"
+
             echo "Waiting for app to start..."
             sleep 5
 
@@ -52,4 +59,4 @@ jobs:
             pm2 list
 
             echo "📋 PM2 logs (last 50 lines):"
-            pm2 logs lms-backend --lines 50 --nostream
+            pm2 logs varona-api --lines 50 --nostream || pm2 logs lms-backend --lines 50 --nostream
