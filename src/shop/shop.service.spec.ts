@@ -2,6 +2,8 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ShopService } from './shop.service';
 import { RevenueArea } from '../payments/schemas/platform-settings.schema';
 
+const USER_ID = '507f1f77bcf86cd799439021';
+
 /**
  * Payment-path coverage for the shop.
  *
@@ -20,7 +22,11 @@ function build(
   const savedOrders: any[] = [];
   const shopOrderModel: any = {
     create: jest.fn(async (doc: any) => {
-      const o = { ...doc, _id: 'order-1', save: jest.fn().mockResolvedValue(true) };
+      const o = {
+        ...doc,
+        _id: 'order-1',
+        save: jest.fn().mockResolvedValue(true),
+      };
       savedOrders.push(o);
       return o;
     }),
@@ -72,7 +78,10 @@ describe('checkout — cart validation', () => {
   it('rejects a cart referencing a missing product', async () => {
     const { service } = build();
     await expect(
-      service.checkout('user-1', cart([{ productId: 'nope', size: 'M', quantity: 1 }])),
+      service.checkout(
+        USER_ID,
+        cart([{ productId: 'nope', size: 'M', quantity: 1 }]),
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
@@ -81,14 +90,20 @@ describe('checkout — cart validation', () => {
       products: { p1: { _id: 'p1', price: 10, isActive: false } },
     });
     await expect(
-      service.checkout('user-1', cart([{ productId: 'p1', size: 'M', quantity: 1 }])),
+      service.checkout(
+        USER_ID,
+        cart([{ productId: 'p1', size: 'M', quantity: 1 }]),
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('rejects a zero total', async () => {
     const { service } = build({ products: { p1: activeProduct('p1', 0) } });
     await expect(
-      service.checkout('user-1', cart([{ productId: 'p1', size: 'M', quantity: 1 }])),
+      service.checkout(
+        USER_ID,
+        cart([{ productId: 'p1', size: 'M', quantity: 1 }]),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
@@ -100,7 +115,7 @@ describe('checkout — price integrity (server computes the amount)', () => {
     });
 
     await service.checkout(
-      'user-1',
+      USER_ID,
       // A client-supplied price is simply not read.
       cart([{ productId: 'p1', size: 'S', quantity: 2, price: 1 } as any]),
     );
@@ -112,11 +127,14 @@ describe('checkout — price integrity (server computes the amount)', () => {
 
   it('sums multiple line items correctly', async () => {
     const { service, payments } = build({
-      products: { p1: activeProduct('p1', 19.99), p2: activeProduct('p2', 5.5) },
+      products: {
+        p1: activeProduct('p1', 19.99),
+        p2: activeProduct('p2', 5.5),
+      },
     });
 
     await service.checkout(
-      'user-1',
+      USER_ID,
       cart([
         { productId: 'p1', size: 'M', quantity: 2 },
         { productId: 'p2', size: 'L', quantity: 1 },
@@ -136,7 +154,10 @@ describe('checkout — price integrity (server computes the amount)', () => {
       currency: 'COP',
     });
 
-    await service.checkout('user-1', cart([{ productId: 'p1', size: 'M', quantity: 1 }]));
+    await service.checkout(
+      USER_ID,
+      cart([{ productId: 'p1', size: 'M', quantity: 1 }]),
+    );
 
     expect(payments.startPayment).toHaveBeenCalledWith(
       expect.objectContaining({ amountMinor: 50000 }),
@@ -149,7 +170,7 @@ describe('checkout — price integrity (server computes the amount)', () => {
     });
 
     const result = await service.checkout(
-      'user-1',
+      USER_ID,
       cart([{ productId: 'p1', size: 'S', quantity: 1 }]),
     );
 
@@ -163,7 +184,10 @@ describe('checkout — price integrity (server computes the amount)', () => {
       products: { p1: activeProduct('p1', 24) },
     });
 
-    await service.checkout('user-1', cart([{ productId: 'p1', size: 'S', quantity: 1 }]));
+    await service.checkout(
+      USER_ID,
+      cart([{ productId: 'p1', size: 'S', quantity: 1 }]),
+    );
 
     expect(payments.startPayment).toHaveBeenCalledWith(
       expect.objectContaining({ sellerId: null }),
@@ -176,7 +200,7 @@ describe('checkout — price integrity (server computes the amount)', () => {
     });
 
     await service.checkout(
-      'user-1',
+      USER_ID,
       cart([{ productId: 'p1', size: 'S', quantity: 1 }], 'pse'),
     );
 

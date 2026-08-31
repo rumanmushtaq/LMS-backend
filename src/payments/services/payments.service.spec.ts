@@ -4,6 +4,7 @@ import { BadRequestException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { PlatformSettingsService } from './platform-settings.service';
 import { PaymentProviderRegistry } from '../providers/provider.registry';
+import { FulfilmentRegistry } from './fulfilment.registry';
 import {
   Payment,
   PaymentStatus,
@@ -76,6 +77,13 @@ describe('PaymentsService', () => {
         { provide: getModelToken(Payment.name), useValue: model },
         { provide: PlatformSettingsService, useValue: settings },
         { provide: PaymentProviderRegistry, useValue: registry },
+        {
+          provide: FulfilmentRegistry,
+          useValue: {
+            register: jest.fn(),
+            fulfil: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     }).compile();
 
