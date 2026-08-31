@@ -1,6 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import {
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -126,6 +127,32 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   VIMEO_API_VERSION: string = '3.4';
+
+  // Which provider NEW live classes broadcast on. Existing sessions keep the
+  // provider they were provisioned with.
+  @IsIn(['vimeo', 'youtube'])
+  @IsOptional()
+  LIVE_PROVIDER: string = 'vimeo';
+
+  // YouTube Live — optional so the app still boots without it; live-class
+  // endpoints fail clearly at call time if credentials are missing.
+  @IsString()
+  @IsOptional()
+  YOUTUBE_CLIENT_ID: string;
+
+  @IsString()
+  @IsOptional()
+  YOUTUBE_CLIENT_SECRET: string;
+
+  @IsString()
+  @IsOptional()
+  YOUTUBE_REFRESH_TOKEN: string;
+
+  // Live-only mode: delete the auto-archived VOD when a class ends ('true'
+  // by default, per the no-replay requirement).
+  @IsString()
+  @IsOptional()
+  YOUTUBE_DELETE_AFTER_END: string = 'true';
 
   // IP security — see securityConfig in configuration.ts for semantics.
   @IsString()

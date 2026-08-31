@@ -122,6 +122,24 @@ export const vimeoConfig = registerAs('vimeo', () => ({
   apiVersion: process.env.VIMEO_API_VERSION || '3.4',
 }));
 
+export const liveConfig = registerAs('live', () => ({
+  // Broadcast provider for NEW live classes: 'vimeo' (default) or 'youtube'.
+  // Existing sessions always stay on the provider they were created with.
+  provider: process.env.LIVE_PROVIDER || 'vimeo',
+}));
+
+export const youtubeConfig = registerAs('youtube', () => ({
+  // OAuth client + offline refresh token for the platform's YouTube channel
+  // (the channel must have live streaming enabled). Obtain the refresh token
+  // with scripts/get-youtube-refresh-token.mjs.
+  clientId: process.env.YOUTUBE_CLIENT_ID,
+  clientSecret: process.env.YOUTUBE_CLIENT_SECRET,
+  refreshToken: process.env.YOUTUBE_REFRESH_TOKEN,
+  // Live-only mode: delete the auto-archived VOD when the tutor ends the
+  // class, so no replay outlives the session.
+  deleteAfterEnd: process.env.YOUTUBE_DELETE_AFTER_END !== 'false',
+}));
+
 /**
  * PSE (Colombian bank transfer). Stripe cannot process PSE, so this points at
  * whichever Colombian PSP is chosen — Wompi, Mercado Pago, ePayco, PayU or

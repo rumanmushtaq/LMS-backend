@@ -28,8 +28,19 @@ export enum LiveStatus {
  */
 @Schema({ _id: false })
 export class LiveSession {
+  // Which provider this session was provisioned on. Legacy documents
+  // predate the field and are all Vimeo.
+  @Prop({ type: String, enum: ['vimeo', 'youtube'], default: 'vimeo' })
+  provider: string;
+
   @Prop({ type: String, default: null })
   vimeoEventId: string | null;
+
+  @Prop({ type: String, default: null })
+  youtubeBroadcastId: string | null;
+
+  @Prop({ type: String, default: null })
+  youtubeStreamId: string | null;
 
   @Prop({ type: String, default: null })
   rtmpUrl: string | null; // SECRET — tutor only

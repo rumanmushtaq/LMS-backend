@@ -4,7 +4,7 @@ import { ClassesController } from './controllers/classes.controller';
 import { ClassesService } from './services/classes.service';
 import { ClassSession, ClassSessionSchema } from './schemas/class.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
-import { VimeoModule } from '../vimeo/vimeo.module';
+import { LiveModule } from '../live/live.module';
 import { ChatModule } from '../chat/chat.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 
@@ -15,7 +15,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
       // Needed by the cancellation policy: suspend the tutor, alert admins.
       { name: User.name, schema: UserSchema },
     ]),
-    VimeoModule,
+    LiveModule,
     ChatModule, // provides ChatService + ChatGateway for the Q&A room
     NotificationsModule, // student cancellation notices + admin alerts
   ],

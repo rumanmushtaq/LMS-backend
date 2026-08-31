@@ -87,7 +87,10 @@ export class PaymentProviderRegistry {
    * Methods an admin has removed from `enabledProviders` are not passed in at
    * all: turning one off is a deliberate choice to hide it.
    */
-  private describe(provider: PaymentProvider, currency: string): AvailableMethod {
+  private describe(
+    provider: PaymentProvider,
+    currency: string,
+  ): AvailableMethod {
     if (!provider.isConfigured()) {
       return {
         id: provider.id,

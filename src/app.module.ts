@@ -18,6 +18,8 @@ import {
   pseConfig,
   vimeoConfig,
   validateEnv,
+  liveConfig,
+  youtubeConfig,
 } from './config';
 
 // Modules
@@ -66,6 +68,8 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
         stripeConfig,
         pseConfig,
         vimeoConfig,
+        liveConfig,
+        youtubeConfig,
       ],
       validate: validateEnv,
       envFilePath: ['.env.local', '.env'],

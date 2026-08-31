@@ -70,7 +70,8 @@ export class PaymentsController {
 
       return { received: true, settled: Boolean(settled) };
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Webhook rejected';
+      const message =
+        error instanceof Error ? error.message : 'Webhook rejected';
 
       // Missing secrets are an operator problem, not a bad request. 503 says
       // "retry later", which is what we want — the events are not lost while

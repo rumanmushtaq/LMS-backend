@@ -16,8 +16,12 @@ function makeService() {
     .fn()
     .mockReturnValue({ exec: jest.fn().mockResolvedValue({}) });
   const classSessionModel: any = { findByIdAndDelete };
-  const vimeoService: any = {
-    deleteLiveEvent: jest.fn().mockResolvedValue({}),
+  const liveStreaming: any = {
+    hasEvent: jest.fn(
+      (live: any) => !!(live?.vimeoEventId || live?.youtubeBroadcastId),
+    ),
+    teardown: jest.fn().mockResolvedValue(undefined),
+    end: jest.fn().mockResolvedValue(undefined),
   };
   const chatService: any = { addParticipant: jest.fn().mockResolvedValue({}) };
   const chatGateway: any = {
@@ -30,7 +34,7 @@ function makeService() {
   const service = new ClassesService(
     classSessionModel,
     {} as any,
-    vimeoService,
+    liveStreaming,
     chatService,
     chatGateway,
     notificationsService,
@@ -38,7 +42,7 @@ function makeService() {
   return {
     service,
     findByIdAndDelete,
-    vimeoService,
+    liveStreaming,
     chatGateway,
     notificationsService,
   };
@@ -191,10 +195,12 @@ describe('endLive (tutor ends the class)', () => {
 
 describe('remove (admin/owner deletes the class)', () => {
   it('an admin can delete any class and tears down the Vimeo event', async () => {
-    const { service, findByIdAndDelete, vimeoService } = makeService();
+    const { service, findByIdAndDelete, liveStreaming } = makeService();
     jest.spyOn(service, 'findOne').mockResolvedValue(fakeClass() as any);
     await service.remove('class-1', 'admin-1', true);
-    expect(vimeoService.deleteLiveEvent).toHaveBeenCalledWith('vimeo-1');
+    expect(liveStreaming.teardown).toHaveBeenCalledWith(
+      expect.objectContaining({ vimeoEventId: 'vimeo-1' }),
+    );
     expect(findByIdAndDelete).toHaveBeenCalledWith('class-1');
   });
 
