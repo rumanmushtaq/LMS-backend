@@ -66,3 +66,26 @@ defaults, never-throw teardown/end), `classes.live-provider.spec.ts`
 (setupLive stores provider ids, refresh path, endLive calls the facade).
 Existing classes specs updated for the facade dependency. Full suite +
 `npm run build` green before push.
+
+## Addendum (2026-09-01): browser broadcasting — no OBS
+
+Teachers stream straight from the laptop camera; the browser cannot speak
+RTMP, so the backend relays: `getUserMedia` + `MediaRecorder` (webm, 1s
+chunks) → Socket.IO namespace `/ingest` (binary) → one **ffmpeg** process per
+live class → RTMP(S) to the class's provisioned `rtmpUrl`/`streamKey` (works
+for YouTube and Vimeo alike).
+
+- `src/ingest/ffmpeg-args.ts` (pure, tested): H.264 camera tracks are
+  **copied** (cheap); VP8/VP9 fall back to `libx264 veryfast/zerolatency`
+  (~1 core per live class). Audio always Opus→AAC. Output `-f flv`.
+- `src/ingest/ingest.service.ts` (tested with a fake spawner): one session
+  per class, tutor-only (ownership re-checked on every chunk), replace-on-
+  restart, graceful stop (stdin end → kill after grace), stderr tail carried
+  into error events, `FFMPEG_PATH` configurable, missing ffmpeg surfaces a
+  clear error.
+- `src/ingest/ingest.gateway.ts`: same handshake auth as the chat gateway
+  (JWT + active session + IP blocklist); events `startIngest` /
+  `ingestChunk` / `stopIngest`, cleanup on disconnect; 8 MB socket buffer.
+- LMS-web: `useBrowserBroadcast` hook (camera/mic capture, mime pick with
+  H.264 preference, chunk pump, teardown) + a "Broadcast from this device"
+  card on the tutor live page; OBS credentials remain as the advanced path.

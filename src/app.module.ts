@@ -19,6 +19,7 @@ import {
   vimeoConfig,
   validateEnv,
   liveConfig,
+  ingestConfig,
   youtubeConfig,
 } from './config';
 
@@ -47,6 +48,7 @@ import { ChatModule } from './chat/chat.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TutorMaterialsModule } from './tutor-materials/tutor-materials.module';
 import { ClassesModule } from './classes/classes.module';
+import { IngestModule } from './ingest/ingest.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecurityModule } from './security/security.module';
 import { IpSecurityMiddleware } from './security/middleware/ip-security.middleware';
@@ -69,6 +71,7 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
         pseConfig,
         vimeoConfig,
         liveConfig,
+        ingestConfig,
         youtubeConfig,
       ],
       validate: validateEnv,
@@ -107,6 +110,7 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
     NotificationsModule,
     TutorMaterialsModule,
     ClassesModule,
+    IngestModule,
     PaymentsModule,
     SecurityModule,
   ],

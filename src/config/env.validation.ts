@@ -154,6 +154,11 @@ export class EnvironmentVariables {
   @IsOptional()
   YOUTUBE_DELETE_AFTER_END: string = 'true';
 
+  // Browser->RTMP relay binary (defaults to 'ffmpeg' on PATH).
+  @IsString()
+  @IsOptional()
+  FFMPEG_PATH: string = 'ffmpeg';
+
   // IP security — see securityConfig in configuration.ts for semantics.
   @IsString()
   @IsOptional()
