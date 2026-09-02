@@ -169,34 +169,57 @@ export class YouTubeService {
     }
   }
 
+  private broadcastBody(title: string, embeddable: boolean) {
+    return {
+      snippet: {
+        title,
+        // AutoStart still requires a nominal scheduled time.
+        scheduledStartTime: new Date().toISOString(),
+      },
+      status: {
+        privacyStatus: 'unlisted',
+        selfDeclaredMadeForKids: false,
+      },
+      contentDetails: {
+        enableAutoStart: true,
+        enableAutoStop: true,
+        // The product plays the stream in our own page — without this,
+        // YouTube's player shows "Playback on other websites has been
+        // disabled by the video owner" everywhere but youtube.com.
+        ...(embeddable ? { enableEmbed: true } : {}),
+        // Live-only product: no DVR scrubbing, lowest available latency.
+        enableDvr: false,
+        latencyPreference: 'ultraLow',
+      },
+    };
+  }
+
   /** Create an unlisted, auto-start broadcast + RTMP stream and bind them. */
   async createLiveEvent(title: string): Promise<YouTubeLiveEvent> {
-    const broadcast = await this.request(
-      'POST',
-      '/liveBroadcasts?part=snippet,status,contentDetails',
-      {
-        snippet: {
-          title,
-          // AutoStart still requires a nominal scheduled time.
-          scheduledStartTime: new Date().toISOString(),
-        },
-        status: {
-          privacyStatus: 'unlisted',
-          selfDeclaredMadeForKids: false,
-        },
-        contentDetails: {
-          enableAutoStart: true,
-          enableAutoStop: true,
-          // The product plays the stream in our own page — without this,
-          // YouTube's player shows "Playback on other websites has been
-          // disabled by the video owner" everywhere but youtube.com.
-          enableEmbed: true,
-          // Live-only product: no DVR scrubbing, lowest available latency.
-          enableDvr: false,
-          latencyPreference: 'ultraLow',
-        },
-      },
-    );
+    let broadcast: any;
+    try {
+      broadcast = await this.request(
+        'POST',
+        '/liveBroadcasts?part=snippet,status,contentDetails',
+        this.broadcastBody(title, true),
+      );
+    } catch (err: any) {
+      // Live-stream embedding is gated on channel eligibility (monetization).
+      // An ineligible channel rejects enableEmbed with "Embed setting was
+      // invalid" — the class must still happen, so retry without it. The
+      // in-page player then falls back to a watch-on-YouTube state.
+      if (!/embed setting|invalidEmbedSetting/i.test(err?.message ?? '')) {
+        throw err;
+      }
+      this.logger.warn(
+        'Channel cannot embed live streams; creating broadcast without enableEmbed.',
+      );
+      broadcast = await this.request(
+        'POST',
+        '/liveBroadcasts?part=snippet,status,contentDetails',
+        this.broadcastBody(title, false),
+      );
+    }
 
     const broadcastId: string | undefined = broadcast?.id;
     if (!broadcastId) {

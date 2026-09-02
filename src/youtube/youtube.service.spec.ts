@@ -133,6 +133,46 @@ describe('createLiveEvent', () => {
   });
 });
 
+describe('createLiveEvent on channels that cannot embed', () => {
+  it('retries without enableEmbed when YouTube rejects the embed setting', async () => {
+    // Live-stream embedding is gated on channel eligibility (monetization);
+    // ineligible channels must still be able to hold classes — the player
+    // falls back, but the broadcast must exist.
+    let broadcastAttempts = 0;
+    const { calls } = installFetch((url, init) => {
+      if (url.includes('oauth2.googleapis.com/token'))
+        return jsonResponse(TOKEN_RESPONSE);
+      if (url.includes('/liveBroadcasts/bind')) return jsonResponse({ id: 'b1' });
+      if (url.includes('/liveBroadcasts')) {
+        broadcastAttempts += 1;
+        const body = JSON.parse(String(init.body));
+        if (body.contentDetails.enableEmbed) {
+          return jsonResponse(
+            {
+              error: {
+                message: 'Embed setting was invalid',
+                errors: [{ reason: 'invalidEmbedSetting' }],
+              },
+            },
+            400,
+          );
+        }
+        return jsonResponse(BROADCAST_RESPONSE);
+      }
+      if (url.includes('/liveStreams')) return jsonResponse(STREAM_RESPONSE);
+      throw new Error(`unexpected url ${url}`);
+    });
+    const service = makeService();
+
+    const event = await service.createLiveEvent('Algebra');
+
+    expect(broadcastAttempts).toBe(2);
+    expect(event.broadcastId).toBe('b1');
+    expect(event.streamKey).toBe('key-123');
+    expect(calls.length).toBeGreaterThan(0);
+  });
+});
+
 describe('getLiveEvent', () => {
   it('re-reads ingest credentials for an existing stream', async () => {
     installFetch((url) => {
