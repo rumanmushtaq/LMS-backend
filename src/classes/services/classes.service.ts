@@ -947,6 +947,9 @@ export class ClassesService {
       classId: (classSession._id as Types.ObjectId).toString(),
       title: classSession.title,
       status: live.status,
+      // Schedule, so the tutor page can count down to the start.
+      startTime: classSession.startTime,
+      endTime: classSession.endTime,
       // Broadcaster secrets — only ever returned from this tutor-guarded path.
       rtmpUrl: live.rtmpUrl,
       streamKey: live.streamKey,

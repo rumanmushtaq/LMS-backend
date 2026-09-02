@@ -85,9 +85,12 @@ describe('setupLive with the provider facade', () => {
     const cls = fakeClass();
     jest.spyOn(service, 'findOne').mockResolvedValue(cls as any);
 
-    await service.setupLive('class-1', TUTOR);
+    const payload = await service.setupLive('class-1', TUTOR);
 
     expect(liveStreaming.provision).toHaveBeenCalledWith('Algebra');
+    // The tutor page needs the schedule to show a countdown before start.
+    expect(payload.startTime).toBeInstanceOf(Date);
+    expect(payload.endTime).toBeInstanceOf(Date);
     expect(cls.liveSession.provider).toBe('youtube');
     expect(cls.liveSession.youtubeBroadcastId).toBe('b1');
     expect(cls.liveSession.youtubeStreamId).toBe('s1');
