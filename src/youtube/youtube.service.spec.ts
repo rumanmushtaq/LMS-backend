@@ -105,6 +105,9 @@ describe('createLiveEvent', () => {
     expect(broadcastBody.status.selfDeclaredMadeForKids).toBe(false);
     expect(broadcastBody.contentDetails.enableAutoStart).toBe(true);
     expect(broadcastBody.contentDetails.enableAutoStop).toBe(true);
+    // Without this, players outside youtube.com get "Playback on other
+    // websites has been disabled" — the whole product is an embedded player.
+    expect(broadcastBody.contentDetails.enableEmbed).toBe(true);
     expect(broadcastBody.snippet.title).toBe('Algebra 101');
 
     const bind = calls.find((c) => c.url.includes('/liveBroadcasts/bind'))!;

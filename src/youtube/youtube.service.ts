@@ -187,6 +187,10 @@ export class YouTubeService {
         contentDetails: {
           enableAutoStart: true,
           enableAutoStop: true,
+          // The product plays the stream in our own page — without this,
+          // YouTube's player shows "Playback on other websites has been
+          // disabled by the video owner" everywhere but youtube.com.
+          enableEmbed: true,
           // Live-only product: no DVR scrubbing, lowest available latency.
           enableDvr: false,
           latencyPreference: 'ultraLow',
