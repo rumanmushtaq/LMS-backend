@@ -126,6 +126,8 @@ export const ingestConfig = registerAs('ingest', () => ({
   // Binary for the browser->RTMP relay. Plain 'ffmpeg' when it is on PATH;
   // point at a static build otherwise.
   ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
+  // Where self-hosted live HLS playlists are written and served from.
+  hlsDir: process.env.LIVE_HLS_DIR,
 }));
 
 export const liveConfig = registerAs('live', () => ({

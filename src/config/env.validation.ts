@@ -130,7 +130,7 @@ export class EnvironmentVariables {
 
   // Which provider NEW live classes broadcast on. Existing sessions keep the
   // provider they were provisioned with.
-  @IsIn(['vimeo', 'youtube'])
+  @IsIn(['vimeo', 'youtube', 'self'])
   @IsOptional()
   LIVE_PROVIDER: string = 'vimeo';
 
@@ -158,6 +158,10 @@ export class EnvironmentVariables {
   @IsString()
   @IsOptional()
   FFMPEG_PATH: string = 'ffmpeg';
+
+  @IsString()
+  @IsOptional()
+  LIVE_HLS_DIR: string;
 
   // IP security — see securityConfig in configuration.ts for semantics.
   @IsString()

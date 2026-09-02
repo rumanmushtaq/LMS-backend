@@ -6,8 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ClassesService } from '../classes/services/classes.service';
-import { buildFfmpegArgs, isH264Mime, rtmpTarget } from './ffmpeg-args';
+import { buildFfmpegArgs, buildHlsArgs, isH264Mime, rtmpTarget } from './ffmpeg-args';
 
 /** The slice of a child process the relay actually uses — swappable in tests. */
 export interface IngestProcess {
@@ -29,6 +31,8 @@ interface Session {
   stderrTail: string;
   stopping: boolean;
   killTimer: NodeJS.Timeout | null;
+  /** Set for self-hosted sessions; removed when the broadcast ends (live-only). */
+  hlsDir: string | null;
 }
 
 const KILL_GRACE_MS = 3000;
@@ -60,6 +64,22 @@ export class IngestService {
     return this.config.get<string>('ingest.ffmpegPath') || 'ffmpeg';
   }
 
+  private get hlsDir(): string {
+    return (
+      this.config.get<string>('ingest.hlsDir') ||
+      path.join(process.cwd(), 'live-hls')
+    );
+  }
+
+  /** Filesystem effects live behind small seams so the specs can stub them. */
+  ensureDir = (dir: string): void => {
+    fs.mkdirSync(dir, { recursive: true });
+  };
+
+  removeDir = (dir: string): void => {
+    fs.rm(dir, { recursive: true, force: true }, () => undefined);
+  };
+
   async start(
     classId: string,
     userId: string,
@@ -73,7 +93,8 @@ export class IngestService {
     }
 
     const live = cls.liveSession;
-    if (!live?.rtmpUrl || !live?.streamKey) {
+    const isSelfHosted = live?.provider === 'self';
+    if (!isSelfHosted && (!live?.rtmpUrl || !live?.streamKey)) {
       throw new BadRequestException(
         'Set up the live session before broadcasting',
       );
@@ -83,10 +104,25 @@ export class IngestService {
     // first or two ffmpegs would fight over the same stream key.
     this.forceStop(classId);
 
-    const args = buildFfmpegArgs({
-      h264: isH264Mime(mimeType),
-      target: rtmpTarget(live.rtmpUrl, live.streamKey),
-    });
+    let args: string[];
+    let hlsDir: string | null = null;
+    if (isSelfHosted) {
+      hlsDir = path.join(this.hlsDir, classId);
+      this.ensureDir(hlsDir);
+      args = buildHlsArgs({ h264: isH264Mime(mimeType), dir: hlsDir });
+    } else {
+      // Re-stated for the type system; the guard above already ensured it.
+      const { rtmpUrl, streamKey } = live;
+      if (!rtmpUrl || !streamKey) {
+        throw new BadRequestException(
+          'Set up the live session before broadcasting',
+        );
+      }
+      args = buildFfmpegArgs({
+        h264: isH264Mime(mimeType),
+        target: rtmpTarget(rtmpUrl, streamKey),
+      });
+    }
 
     const proc = this.spawnFn(this.ffmpegPath, args);
     const session: Session = {
@@ -96,6 +132,7 @@ export class IngestService {
       stderrTail: '',
       stopping: false,
       killTimer: null,
+      hlsDir,
     };
     this.sessions.set(classId, session);
 
@@ -171,6 +208,8 @@ export class IngestService {
 
   private cleanup(classId: string, session: Session): void {
     if (session.killTimer) clearTimeout(session.killTimer);
+    // Live-only: nothing to replay once the broadcast is over.
+    if (session.hlsDir) this.removeDir(session.hlsDir);
     // Only remove the session if it is still the one we own — a replacement
     // may already have taken the slot.
     if (this.sessions.get(classId) === session) {

@@ -19,13 +19,7 @@ export const rtmpTarget = (rtmpUrl: string, streamKey: string): string =>
  * transcoded with a realtime x264 profile (~1 core per class). Audio is
  * always re-encoded: browsers record Opus, and FLV/RTMP cannot carry it.
  */
-export const buildFfmpegArgs = ({
-  h264,
-  target,
-}: {
-  h264: boolean;
-  target: string;
-}): string[] => [
+const codecArgs = (h264: boolean): string[] => [
   '-hide_banner',
   '-loglevel', 'warning',
   '-i', 'pipe:0',
@@ -44,6 +38,33 @@ export const buildFfmpegArgs = ({
   '-c:a', 'aac',
   '-b:a', '128k',
   '-ar', '44100',
-  '-f', 'flv',
+];
+
+export const buildFfmpegArgs = ({
+  h264,
   target,
+}: {
+  h264: boolean;
+  target: string;
+}): string[] => [...codecArgs(h264), '-f', 'flv', target];
+
+/**
+ * Self-hosted delivery: a rolling live HLS playlist on our own disk.
+ * `delete_segments` keeps it live-only — nothing older than the window
+ * survives, and the whole directory is removed when the class ends.
+ */
+export const buildHlsArgs = ({
+  h264,
+  dir,
+}: {
+  h264: boolean;
+  dir: string;
+}): string[] => [
+  ...codecArgs(h264),
+  '-f', 'hls',
+  '-hls_time', '2',
+  '-hls_list_size', '10',
+  '-hls_flags', 'delete_segments+independent_segments',
+  '-hls_segment_filename', `${dir}/seg_%05d.ts`,
+  `${dir}/index.m3u8`,
 ];

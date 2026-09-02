@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { VimeoService } from '../vimeo/vimeo.service';
 import { YouTubeService } from '../youtube/youtube.service';
 
-export type LiveProvider = 'vimeo' | 'youtube';
+export type LiveProvider = 'vimeo' | 'youtube' | 'self';
 
 export interface LiveCredentials {
   rtmpUrl: string | null;
@@ -42,24 +42,41 @@ export class LiveStreamingService {
 
   /** Provider new live sessions are provisioned on. */
   get provider(): LiveProvider {
-    return this.config.get<string>('live.provider') === 'youtube'
-      ? 'youtube'
-      : 'vimeo';
+    const configured = this.config.get<string>('live.provider');
+    if (configured === 'youtube' || configured === 'self') return configured;
+    return 'vimeo';
   }
 
   /** Provider that owns an existing session. Legacy documents (no `provider`
    *  field) predate YouTube support and were all Vimeo. */
   providerOf(live: any): LiveProvider {
     if (live?.provider === 'youtube') return 'youtube';
+    if (live?.provider === 'self') return 'self';
     if (live?.provider === 'vimeo') return 'vimeo';
     return live?.youtubeBroadcastId ? 'youtube' : 'vimeo';
   }
 
   hasEvent(live: any): boolean {
+    if (live?.provider === 'self') return !!live?.embedUrl;
     return !!(live?.vimeoEventId || live?.youtubeBroadcastId);
   }
 
   async provision(title: string): Promise<ProvisionedLive> {
+    if (this.provider === 'self') {
+      // Nothing external to create: the ingest relay writes HLS on our own
+      // disk and the player fetches it through the token-gated endpoint.
+      // `embedUrl` is a marker (the frontend builds the real URL per viewer).
+      return {
+        provider: 'self',
+        vimeoEventId: null,
+        youtubeBroadcastId: null,
+        youtubeStreamId: null,
+        rtmpUrl: null,
+        streamKey: null,
+        embedUrl: 'self',
+      };
+    }
+
     if (this.provider === 'youtube') {
       const event = await this.youtube.createLiveEvent(title);
       return {
@@ -87,6 +104,10 @@ export class LiveStreamingService {
 
   /** Re-read ingest credentials from the provider that owns the session. */
   async refresh(live: any): Promise<LiveCredentials> {
+    if (this.providerOf(live) === 'self') {
+      return { rtmpUrl: null, streamKey: null, embedUrl: live?.embedUrl ?? 'self' };
+    }
+
     if (this.providerOf(live) === 'youtube') {
       const event = await this.youtube.getLiveEvent(
         live.youtubeBroadcastId,
@@ -126,6 +147,7 @@ export class LiveStreamingService {
   /** Class cancelled/removed: delete whatever event was provisioned. */
   async teardown(live: any): Promise<void> {
     if (!this.hasEvent(live)) return;
+    if (this.providerOf(live) === 'self') return; // ingest removes its own files
     try {
       if (this.providerOf(live) === 'youtube') {
         await this.youtube.deleteLiveEvent(

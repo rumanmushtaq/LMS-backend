@@ -869,6 +869,7 @@ export class ClassesService {
       endTime: classSession.endTime,
       live: {
         status: live?.status ?? LiveStatus.IDLE,
+        provider: this.liveStreaming.providerOf(live),
         embedUrl: live?.embedUrl ?? null,
         conversationId: live?.conversationId?.toString() ?? null,
         recordingUrl: live?.recordingUrl ?? null,

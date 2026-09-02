@@ -1,4 +1,4 @@
-import { buildFfmpegArgs, isH264Mime, rtmpTarget } from './ffmpeg-args';
+import { buildFfmpegArgs, buildHlsArgs, isH264Mime, rtmpTarget } from './ffmpeg-args';
 
 describe('isH264Mime', () => {
   it('recognises H.264 recorder mime types, case-insensitively', () => {
@@ -52,5 +52,29 @@ describe('buildFfmpegArgs', () => {
     const args = buildFfmpegArgs({ h264: true, target });
     expect(args).toContain('pipe:0');
     expect(args.slice(-3)).toEqual(['-f', 'flv', target]);
+  });
+});
+
+describe('buildHlsArgs (self-hosted delivery)', () => {
+  const dir = '/data/live-hls/class-1';
+
+  it('writes a rolling HLS playlist into the class directory', () => {
+    const args = buildHlsArgs({ h264: true, dir });
+    expect(args.slice(-1)[0]).toBe('/data/live-hls/class-1/index.m3u8');
+    const f = args.indexOf('-f');
+    expect(args[f + 1]).toBe('hls');
+    const seg = args.indexOf('-hls_segment_filename');
+    expect(args[seg + 1]).toBe('/data/live-hls/class-1/seg_%05d.ts');
+  });
+
+  it('is live-only: old segments are deleted as the stream advances', () => {
+    const args = buildHlsArgs({ h264: true, dir });
+    const flags = args[args.indexOf('-hls_flags') + 1];
+    expect(flags).toContain('delete_segments');
+  });
+
+  it('copies H.264 and transcodes anything else, like the RTMP path', () => {
+    expect(buildHlsArgs({ h264: true, dir })).toContain('copy');
+    expect(buildHlsArgs({ h264: false, dir })).toContain('libx264');
   });
 });

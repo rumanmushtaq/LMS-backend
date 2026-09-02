@@ -49,6 +49,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { TutorMaterialsModule } from './tutor-materials/tutor-materials.module';
 import { ClassesModule } from './classes/classes.module';
 import { IngestModule } from './ingest/ingest.module';
+import { LiveHlsModule } from './live/live-hls.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecurityModule } from './security/security.module';
 import { IpSecurityMiddleware } from './security/middleware/ip-security.middleware';
@@ -111,6 +112,7 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
     TutorMaterialsModule,
     ClassesModule,
     IngestModule,
+    LiveHlsModule,
     PaymentsModule,
     SecurityModule,
   ],

@@ -30,7 +30,7 @@ export enum LiveStatus {
 export class LiveSession {
   // Which provider this session was provisioned on. Legacy documents
   // predate the field and are all Vimeo.
-  @Prop({ type: String, enum: ['vimeo', 'youtube'], default: 'vimeo' })
+  @Prop({ type: String, enum: ['vimeo', 'youtube', 'self'], default: 'vimeo' })
   provider: string;
 
   @Prop({ type: String, default: null })

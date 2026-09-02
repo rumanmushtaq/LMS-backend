@@ -89,3 +89,30 @@ for YouTube and Vimeo alike).
 - LMS-web: `useBrowserBroadcast` hook (camera/mic capture, mime pick with
   H.264 preference, chunk pump, teardown) + a "Broadcast from this device"
   card on the tutor live page; OBS credentials remain as the advanced path.
+
+## Addendum (2026-09-03): self-hosted delivery (`LIVE_PROVIDER=self`)
+
+The test channel cannot embed YouTube live streams (embedding is gated on
+channel eligibility; `enableEmbed` is rejected with 400), so in-site playback
+moved off YouTube entirely. With `LIVE_PROVIDER=self`:
+
+- Provisioning touches no external provider; the liveSession stores
+  `provider: 'self'` (facade `hasEvent`/`refresh`/`end`/`teardown` are no-ops).
+- The existing browser→ffmpeg relay writes a rolling live HLS playlist to
+  `<LIVE_HLS_DIR|./live-hls>/<classId>/` (`buildHlsArgs`: 2s segments,
+  `delete_segments` = live-only; the directory is removed when the broadcast
+  ends). `live-hls` is excluded in tsconfig(.build).json — HLS segments are
+  `.ts` files and the Nest watcher tried to compile video as TypeScript.
+- `LiveHlsService`/`LiveHlsController`: `GET live-hls/:classId/token`
+  (authenticated; tutor/enrolled/admin only) mints a 6h class-scoped JWT
+  (`purpose: 'hls'`); `GET live-hls/:classId/:token/:file` (`@Public`, the
+  token IS the auth) serves only `index.m3u8`/`seg_NNNNN.ts` — file names are
+  allow-listed, so requests cannot escape the class directory.
+- The token is a PATH segment so relative segment URLs resolve under it with
+  zero player configuration (hls.js and native Safari alike).
+- LMS-web: `HlsPlayer` (hls.js, lazy-loaded, native-HLS fallback) +
+  `useSelfPlayback` hook; both live views render it when
+  `provider === 'self'`; the OBS credentials card hides for self classes.
+- Verified end-to-end over HTTP: real ffmpeg-generated stream served 200 with
+  a valid token; wrong-purpose/garbage/wrong-class tokens 401; traversal-ish
+  file names 400; not-live 404.

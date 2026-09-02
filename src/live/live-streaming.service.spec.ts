@@ -160,3 +160,38 @@ describe('hasEvent', () => {
     expect(service.hasEvent(undefined)).toBe(false);
   });
 });
+
+describe("provider 'self' (our own HLS delivery)", () => {
+  const selfSession = { provider: 'self', embedUrl: 'self' };
+
+  it('provisions without touching any external provider', async () => {
+    const { service, vimeo, youtube } = makeService('self');
+    const event = await service.provision('Algebra');
+    expect(vimeo.createLiveEvent).not.toHaveBeenCalled();
+    expect(youtube.createLiveEvent).not.toHaveBeenCalled();
+    expect(event).toMatchObject({
+      provider: 'self',
+      vimeoEventId: null,
+      youtubeBroadcastId: null,
+      rtmpUrl: null,
+      streamKey: null,
+    });
+    expect(event.embedUrl).toBeTruthy();
+  });
+
+  it('counts a self session as a provisioned event', () => {
+    const { service } = makeService('self');
+    expect(service.hasEvent(selfSession)).toBe(true);
+  });
+
+  it('refresh, end and teardown are external no-ops for self sessions', async () => {
+    const { service, vimeo, youtube } = makeService('self');
+    await service.refresh(selfSession);
+    await service.end(selfSession);
+    await service.teardown(selfSession);
+    expect(vimeo.getLiveEvent).not.toHaveBeenCalled();
+    expect(youtube.getLiveEvent).not.toHaveBeenCalled();
+    expect(vimeo.deleteLiveEvent).not.toHaveBeenCalled();
+    expect(youtube.deleteLiveEvent).not.toHaveBeenCalled();
+  });
+});

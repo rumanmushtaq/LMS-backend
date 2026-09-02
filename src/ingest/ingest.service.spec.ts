@@ -61,11 +61,20 @@ function makeService(over: { liveSession?: any; ffmpegPath?: string } = {}) {
   };
   const classesService: any = { findOne: jest.fn().mockResolvedValue(cls) };
   const config = {
-    get: (key: string) =>
-      key === 'ingest.ffmpegPath' ? over.ffmpegPath ?? 'ffmpeg' : undefined,
+    get: (key: string) => {
+      if (key === 'ingest.ffmpegPath') return over.ffmpegPath ?? 'ffmpeg';
+      if (key === 'ingest.hlsDir') return '/data/live-hls';
+      return undefined;
+    },
   } as ConfigService;
 
   const service = new IngestService(classesService, config);
+  // Filesystem side effects are stubbed; the specs assert on intent.
+  const removed: string[] = [];
+  service.ensureDir = jest.fn();
+  service.removeDir = jest.fn((dir: string) => {
+    removed.push(dir);
+  });
   const procs: FakeProc[] = [];
   service.spawnFn = (cmd: string, args: string[]) => {
     const p = new FakeProc(cmd, args);
@@ -75,7 +84,7 @@ function makeService(over: { liveSession?: any; ffmpegPath?: string } = {}) {
   const events: Array<{ event: string; detail?: string }> = [];
   const onEvent = (event: string, detail?: string) =>
     events.push({ event, detail });
-  return { service, classesService, procs, events, onEvent };
+  return { service, classesService, procs, events, onEvent, removed };
 }
 
 describe('start', () => {
@@ -192,5 +201,32 @@ describe('lifecycle', () => {
     expect(() => service.stop('class-1', 'intruder')).toThrow(
       ForbiddenException,
     );
+  });
+});
+
+describe('self-hosted sessions', () => {
+  const selfClass = { provider: 'self', embedUrl: 'self' };
+
+  it('streams to a per-class HLS directory instead of RTMP', async () => {
+    const { service, procs, events, onEvent } = makeService({
+      liveSession: selfClass,
+    });
+    await service.start('class-1', TUTOR, 'video/webm;codecs=h264,opus', onEvent);
+
+    expect(events).toEqual([{ event: 'ready', detail: undefined }]);
+    const args = procs[0].args;
+    expect(args[args.length - 1]).toBe('/data/live-hls/class-1/index.m3u8');
+    expect(args[args.indexOf('-f') + 1]).toBe('hls');
+    expect(service.ensureDir).toHaveBeenCalledWith('/data/live-hls/class-1');
+  });
+
+  it('live-only: removes the HLS directory when the broadcast ends', async () => {
+    const { service, procs, removed, onEvent } = makeService({
+      liveSession: selfClass,
+    });
+    await service.start('class-1', TUTOR, 'video/webm', onEvent);
+    service.stop('class-1', TUTOR);
+    procs[0].emit('exit', 0);
+    expect(removed).toContain('/data/live-hls/class-1');
   });
 });
