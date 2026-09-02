@@ -63,6 +63,10 @@ export class LiveHlsController {
       'Content-Type',
       file.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t',
     );
+    // Helmet defaults to CORP same-origin, which blocks the <video> element's
+    // no-cors requests from the frontend origin (ERR_BLOCKED_BY_RESPONSE).
+    // Stream files are already gated by the playback token.
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     // The playlist mutates every ~2s; caching it stalls the stream.
     res.setHeader('Cache-Control', 'no-store');
     fs.createReadStream(filePath).pipe(res);
