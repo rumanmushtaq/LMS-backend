@@ -95,6 +95,36 @@ export class ClassSession extends Document {
   @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
   students: Types.ObjectId[];
 
+  // ── Group classes ───────────────────────────────────────────────────────
+  // A 'private' class is the original one-to-one product: one student, born
+  // from a request. 'group' classes are created by the tutor first and filled
+  // by paying students from an invite link. The default keeps every existing
+  // document behaving exactly as it did before group classes existed.
+  @ApiProperty({ description: "'private' (1-to-1) or 'group' (many students)" })
+  @Prop({ type: String, enum: ['private', 'group'], default: 'private' })
+  visibility: 'private' | 'group';
+
+  @ApiProperty({ description: 'Seat limit — only meaningful for group classes' })
+  @Prop({ type: Number, default: 1, min: 0 })
+  maxStudents: number;
+
+  @ApiProperty({ description: 'Price of one seat' })
+  @Prop({ type: Number, default: 0, min: 0 })
+  price: number;
+
+  @ApiProperty({ description: 'Random token in the shareable invite link' })
+  @Prop({ type: String, default: null })
+  inviteToken: string | null;
+
+  /**
+   * Students who left (or were removed). Leaving frees the seat for someone
+   * else but is permanent for the leaver: this list is what blocks a rejoin,
+   * so it must never be pruned.
+   */
+  @ApiProperty({ description: 'Students who left — permanently barred' })
+  @Prop({ type: [{ type: Types.ObjectId, ref: 'User' }], default: [] })
+  leftStudents: Types.ObjectId[];
+
   @ApiProperty({ description: 'Optional reference to a parent Course' })
   @Prop({ type: Types.ObjectId, ref: 'Course', default: null })
   courseId: Types.ObjectId | null;
@@ -171,6 +201,9 @@ ClassSessionSchema.index({ tutorId: 1 });
 ClassSessionSchema.index({ requestedBy: 1 });
 ClassSessionSchema.index({ startTime: 1 });
 ClassSessionSchema.index({ status: 1 });
+// Sparse: only group classes carry a token, and the null of every private
+// class must not collide with another private class's null.
+ClassSessionSchema.index({ inviteToken: 1 }, { unique: true, sparse: true });
 
 // Never leak broadcaster secrets in any serialized class payload. The RTMP
 // ingest URL and stream key are delivered only via the tutor-only

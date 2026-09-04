@@ -47,13 +47,13 @@ export class LiveHlsController {
   @Public()
   @Get(':classId/:token/:file')
   @ApiOperation({ summary: 'Serve a live HLS playlist/segment (token-gated)' })
-  serve(
+  async serve(
     @Param('classId') classId: string,
     @Param('token') token: string,
     @Param('file') file: string,
     @Res() res: Response,
   ) {
-    this.liveHls.assertPlayable(token, classId);
+    await this.liveHls.assertPlayable(token, classId);
     const filePath = this.liveHls.filePathFor(classId, file);
     if (!fs.existsSync(filePath)) {
       // Not an error state for the player: the class just isn't live (yet).

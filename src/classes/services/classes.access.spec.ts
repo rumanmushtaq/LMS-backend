@@ -22,6 +22,9 @@ function makeService() {
     ),
     teardown: jest.fn().mockResolvedValue(undefined),
     end: jest.fn().mockResolvedValue(undefined),
+    providerOf: jest.fn((live: any) =>
+      live?.provider ?? (live?.youtubeBroadcastId ? 'youtube' : 'vimeo'),
+    ),
   };
   const chatService: any = { addParticipant: jest.fn().mockResolvedValue({}) };
   const chatGateway: any = {

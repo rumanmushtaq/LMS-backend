@@ -740,6 +740,15 @@ export class ClassesService {
   async enrollStudent(id: string, studentId: string): Promise<ClassSession> {
     const classSession = await this.findOne(id);
 
+    // Seats in a group class are paid for. This route adds the caller with no
+    // payment at all, so letting it touch a group class would give away a
+    // seat — they are granted only by GroupClassFulfilment once money settles.
+    if ((classSession as any).visibility === 'group') {
+      throw new BadRequestException(
+        'Seats in a group class are bought, not claimed — use the class invite link',
+      );
+    }
+
     const isEnrolled = classSession.students.some(
       (student: any) => student._id.toString() === studentId,
     );

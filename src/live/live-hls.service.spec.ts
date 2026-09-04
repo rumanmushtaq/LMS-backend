@@ -61,34 +61,41 @@ describe('mintPlaybackToken', () => {
 });
 
 describe('assertPlayable', () => {
-  it('accepts a valid token for the same class', () => {
+  it('accepts a valid token for the same class', async () => {
     const { service, jwtService } = makeService();
-    jwtService.verify.mockReturnValue({ purpose: 'hls', classId: CLASS_ID });
-    expect(() => service.assertPlayable('t', CLASS_ID)).not.toThrow();
+    jwtService.verify.mockReturnValue({
+      purpose: 'hls',
+      classId: CLASS_ID,
+      sub: STUDENT,
+      role: 'student',
+    });
+    await expect(
+      service.assertPlayable('t', CLASS_ID),
+    ).resolves.toBeUndefined();
   });
 
-  it('rejects a token for a different class', () => {
+  it('rejects a token for a different class', async () => {
     const { service, jwtService } = makeService();
     jwtService.verify.mockReturnValue({ purpose: 'hls', classId: 'other' });
-    expect(() => service.assertPlayable('t', CLASS_ID)).toThrow(
+    await expect(service.assertPlayable('t', CLASS_ID)).rejects.toThrow(
       UnauthorizedException,
     );
   });
 
-  it('rejects a general access token used as a playback token', () => {
+  it('rejects a general access token used as a playback token', async () => {
     const { service, jwtService } = makeService();
     jwtService.verify.mockReturnValue({ sub: 'user', classId: CLASS_ID });
-    expect(() => service.assertPlayable('t', CLASS_ID)).toThrow(
+    await expect(service.assertPlayable('t', CLASS_ID)).rejects.toThrow(
       UnauthorizedException,
     );
   });
 
-  it('rejects garbage tokens', () => {
+  it('rejects garbage tokens', async () => {
     const { service, jwtService } = makeService();
     jwtService.verify.mockImplementation(() => {
       throw new Error('bad signature');
     });
-    expect(() => service.assertPlayable('t', CLASS_ID)).toThrow(
+    await expect(service.assertPlayable('t', CLASS_ID)).rejects.toThrow(
       UnauthorizedException,
     );
   });
@@ -119,5 +126,45 @@ describe('filePathFor', () => {
     expect(() => service.filePathFor('../oops', 'index.m3u8')).toThrow(
       BadRequestException,
     );
+  });
+});
+
+describe('assertPlayable re-checks enrolment', () => {
+  /**
+   * The token lives for hours, so authorising once at mint time is not enough:
+   * a student who leaves (or is removed) must lose the picture, not keep it
+   * until their token happens to expire.
+   */
+  it('rejects a token held by a student who has left the class', async () => {
+    const { service, classesService, jwtService } = makeService();
+    jwtService.verify.mockReturnValue({
+      purpose: 'hls',
+      classId: CLASS_ID,
+      sub: STUDENT,
+      role: 'student',
+    });
+    classesService.findOne.mockResolvedValue({
+      _id: CLASS_ID,
+      tutorId: { toString: () => TUTOR },
+      students: [], // the student left
+    });
+
+    await expect(service.assertPlayable('t', CLASS_ID)).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('still serves a student who is on the roster', async () => {
+    const { service, jwtService } = makeService();
+    jwtService.verify.mockReturnValue({
+      purpose: 'hls',
+      classId: CLASS_ID,
+      sub: STUDENT,
+      role: 'student',
+    });
+
+    await expect(
+      service.assertPlayable('t', CLASS_ID),
+    ).resolves.toBeUndefined();
   });
 });
