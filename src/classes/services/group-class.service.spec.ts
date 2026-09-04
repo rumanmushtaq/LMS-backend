@@ -19,6 +19,7 @@ jest.setTimeout(60_000);
 
 let mongod: MongoMemoryServer;
 let model: Model<ClassSessionDocument>;
+let userModel: Model<any>;
 let service: GroupClassService;
 
 const TUTOR = new Types.ObjectId().toString();
@@ -33,6 +34,12 @@ beforeAll(async () => {
     ClassSession.name,
     ClassSessionSchema as any,
   ) as unknown as Model<ClassSessionDocument>;
+  // The roster populates student names, so `User` must be a real model here —
+  // populate against an unregistered ref throws.
+  userModel = mongoose.model(
+    'User',
+    new mongoose.Schema({ firstName: String, lastName: String, email: String }),
+  );
 });
 
 afterAll(async () => {
@@ -42,7 +49,8 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await model.deleteMany({});
-  service = new GroupClassService(model);
+  await userModel.deleteMany({});
+  service = new GroupClassService(model, userModel as any);
 });
 
 /** A group class with `seats` seats, open for joining. */
@@ -63,6 +71,16 @@ async function makeGroupClass(seats: number): Promise<string> {
 }
 
 const newStudent = () => new Types.ObjectId().toString();
+
+/** A real user row, so the roster has a name to show for them. */
+async function makeStudentNamed(firstName: string): Promise<string> {
+  const doc = await userModel.create({
+    firstName,
+    lastName: 'Learner',
+    email: `${firstName.toLowerCase()}@example.com`,
+  });
+  return doc._id.toString();
+}
 
 const studentIdsOf = (cls: any): string[] =>
   cls.students.map((s: any) => s.toString());
@@ -315,12 +333,34 @@ describe('the tutor’s roster view', () => {
 
     const roster = await service.roster(classId, TUTOR);
 
-    expect(roster.students.map(String)).toEqual([staying]);
-    expect(roster.departed.map(String)).toEqual([leaving]);
+    expect(roster.students.map((s: any) => String(s._id ?? s))).toEqual([
+      staying,
+    ]);
+    expect(roster.departed.map((s: any) => String(s._id ?? s))).toEqual([
+      leaving,
+    ]);
     expect(roster.seatsLeft).toBe(4);
   });
 
-  it('refuses to show the roster to anyone but the class’s tutor', async () => {
+  /**
+   * A roster of bare ids is useless to a tutor deciding whom to remove, so it
+   * carries the names the UI shows.
+   */
+  it('names the students rather than listing raw ids', async () => {
+    const classId = await makeGroupClass(5);
+    const staying = await makeStudentNamed('Ada');
+    const leaving = await makeStudentNamed('Grace');
+    await service.join(classId, staying);
+    await service.join(classId, leaving);
+    await service.leave(classId, leaving);
+
+    const roster = await service.roster(classId, TUTOR);
+
+    expect((roster.students[0] as any).firstName).toBe('Ada');
+    expect((roster.departed[0] as any).firstName).toBe('Grace');
+  });
+
+  it('refuses to show the roster to anyone but the class\u2019s tutor', async () => {
     const classId = await makeGroupClass(5);
 
     await expect(service.roster(classId, newStudent())).rejects.toThrow(

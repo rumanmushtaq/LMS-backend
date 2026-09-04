@@ -7,6 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'crypto';
 import { Model, Types } from 'mongoose';
+import { User, UserDocument } from '../../users/schemas/user.schema';
 import {
   ClassSession,
   ClassSessionDocument,
@@ -21,6 +22,14 @@ export interface GroupClassDetails {
   endTime: Date;
   maxStudents: number;
   price: number;
+}
+
+/** One person on a roster. Only `_id` is guaranteed — the user row may be gone. */
+export interface RosterEntry {
+  _id: string;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
 }
 
 /** The offer an invite link shows to someone who has not paid yet. */
@@ -54,6 +63,8 @@ export class GroupClassService {
   constructor(
     @InjectModel(ClassSession.name)
     private readonly classSessionModel: Model<ClassSessionDocument>,
+    @InjectModel(User.name)
+    private readonly userModel: Model<UserDocument>,
   ) {}
 
   /**
@@ -207,17 +218,31 @@ export class GroupClassService {
     classId: string,
     tutorId: string,
   ): Promise<{
-    students: Types.ObjectId[];
-    departed: Types.ObjectId[];
+    students: RosterEntry[];
+    departed: RosterEntry[];
     seatsLeft: number;
   }> {
     const cls = await this.load(classId);
     if (cls.tutorId?.toString() !== tutorId) {
       throw new ForbiddenException('You are not the tutor for this class');
     }
+
+    // Bare ids are useless to a tutor deciding whom to remove, and `populate`
+    // cannot supply the names: these paths are registered as Mixed (see oid
+    // above), which makes populate a silent no-op. So the users are read
+    // directly — one query for both lists.
+    const enrolled = cls.students ?? [];
+    const departed = cls.leftStudents ?? [];
+    const users = await this.userModel
+      .find({ _id: { $in: [...enrolled, ...departed] } })
+      .select('firstName lastName email')
+      .lean();
+    const byId = new Map(users.map((u: any) => [String(u._id), u]));
+    const name = (id: any) => byId.get(String(id)) ?? id;
+
     return {
-      students: cls.students ?? [],
-      departed: cls.leftStudents ?? [],
+      students: enrolled.map(name),
+      departed: departed.map(name),
       seatsLeft: GroupClassService.freeSeats(cls),
     };
   }
