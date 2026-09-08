@@ -5,6 +5,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
   HttpCode,
@@ -23,6 +24,8 @@ import { UserRole } from '../users/schemas/user.schema';
 import { PaymentsService } from './services/payments.service';
 import { PlatformSettingsService } from './services/platform-settings.service';
 import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
+import { PaymentStatus } from './schemas/payment.schema';
+import { RevenueArea } from './schemas/platform-settings.schema';
 
 /** Raw body is needed for signature verification — see main.ts. */
 type RawBodyRequest = Request & { rawBody?: Buffer };
@@ -115,6 +118,27 @@ export class PaymentsController {
   ) {
     const adminId = req?.user?._id || req?.user?.userId;
     return this.settings.update(dto, adminId);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Get('admin/transactions')
+  @ApiOperation({
+    summary: '[Admin] Every payment, with settled gross / commission / net',
+  })
+  async transactions(
+    @Query('area') area?: RevenueArea,
+    @Query('status') status?: PaymentStatus,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.payments.listTransactions({
+      area,
+      status,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+    });
   }
 
   // ─── Seller balance ─────────────────────────────────────────────────────

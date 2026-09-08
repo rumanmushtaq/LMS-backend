@@ -46,8 +46,12 @@ export class TutorMaterialsService {
       filter.isActive = String(query.isActive) === 'true';
     }
 
+    // fileUrl is withheld: it IS the product. Listing it handed every paid
+    // material to anyone with an account, which made the purchase flow
+    // decorative. It is released per student by getPurchasedMaterials.
     return this.materialModel
       .find(filter)
+      .select('-fileUrl')
       .populate('tutorId', 'firstName lastName avatar')
       .sort({ createdAt: -1 })
       .exec();
@@ -56,6 +60,8 @@ export class TutorMaterialsService {
   async findOne(id: string): Promise<TutorMaterial> {
     const material = await this.materialModel
       .findById(id)
+      // Withheld for the same reason as the listing — see findAll.
+      .select('-fileUrl')
       .populate('tutorId', 'firstName lastName avatar')
       .exec();
     if (!material) throw new NotFoundException(`Material not found`);

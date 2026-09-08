@@ -56,6 +56,83 @@ export class PaymentsService {
   ) {}
 
   /** Payment methods to offer this buyer, in admin-configured order. */
+  /**
+   * The admin transaction ledger.
+   *
+   * Totals cover settled money only: a pending or failed payment has moved
+   * nothing, and including it would overstate both revenue and what the
+   * platform owes its tutors. They are computed in the database over the whole
+   * filtered set, not over the current page — a total that changed when you
+   * turned the page would be worse than no total at all.
+   */
+  async listTransactions(filter: {
+    area?: RevenueArea;
+    status?: PaymentStatus;
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    data: PaymentDocument[];
+    totals: {
+      grossMinor: number;
+      commissionMinor: number;
+      netMinor: number;
+      currency: string;
+    };
+    totalCount: number;
+    totalPages: number;
+    currentPage: number;
+  }> {
+    const page = Math.max(1, filter.page ?? 1);
+    const limit = Math.min(Math.max(1, filter.limit ?? 20), 100);
+
+    const query: Record<string, unknown> = {};
+    if (filter.area) query.area = filter.area;
+    if (filter.status) query.status = filter.status;
+
+    const [data, totalCount, settled] = await Promise.all([
+      this.paymentModel
+        .find(query)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('buyerId', 'firstName lastName email')
+        .populate('sellerId', 'firstName lastName email')
+        .lean()
+        .exec(),
+      this.paymentModel.countDocuments(query).exec(),
+      this.paymentModel
+        .aggregate([
+          { $match: { ...query, status: PaymentStatus.PAID } },
+          {
+            $group: {
+              _id: '$currency',
+              grossMinor: { $sum: '$grossMinor' },
+              commissionMinor: { $sum: '$commissionMinor' },
+              netMinor: { $sum: '$netMinor' },
+            },
+          },
+        ])
+        .exec(),
+    ]);
+
+    // One currency per platform today (settings hold a single `currency`), so
+    // a single row is expected; taking the first keeps the shape stable if
+    // historical rows were ever written in another.
+    const sums = settled[0] ?? {};
+    return {
+      data: data as PaymentDocument[],
+      totals: {
+        grossMinor: sums.grossMinor ?? 0,
+        commissionMinor: sums.commissionMinor ?? 0,
+        netMinor: sums.netMinor ?? 0,
+        currency: sums._id ?? 'USD',
+      },
+      totalCount,
+      totalPages: Math.max(1, Math.ceil(totalCount / limit)),
+      currentPage: page,
+    };
+  }
+
   async availableMethods() {
     const settings = await this.settings.get();
     return this.registry.availableFor(

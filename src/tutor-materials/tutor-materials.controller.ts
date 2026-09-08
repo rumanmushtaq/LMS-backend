@@ -29,6 +29,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/schemas/user.schema';
+import { MaterialsCheckoutService } from './materials-checkout.service';
+import { PurchaseMaterialDto } from './dto/purchase-material.dto';
 import { UploadService } from '../admin/services/upload.service';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -39,6 +41,7 @@ export class TutorMaterialsController {
   constructor(
     private readonly tutorMaterialsService: TutorMaterialsService,
     private readonly uploadService: UploadService,
+    private readonly materialsCheckout: MaterialsCheckoutService,
   ) {}
 
   @Get()
@@ -137,11 +140,20 @@ export class TutorMaterialsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.STUDENT)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Purchase a material (Student only) - Mock flow' })
-  purchaseMaterial(@Req() req: any, @Param('id') materialId: string) {
-    return this.tutorMaterialsService.purchaseMaterial(
+  @ApiOperation({
+    summary:
+      'Buy a material (Student). Returns payment instructions; the download ' +
+      'is released only once the payment settles.',
+  })
+  purchaseMaterial(
+    @Req() req: any,
+    @Param('id') materialId: string,
+    @Body() dto: PurchaseMaterialDto,
+  ) {
+    return this.materialsCheckout.startPurchase(
       req.user._id.toString(),
       materialId,
+      dto.paymentMethod,
     );
   }
 

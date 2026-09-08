@@ -11,6 +11,9 @@ import {
   MaterialPurchaseSchema,
 } from './schemas/material-purchase.schema';
 import { AdminModule } from '../admin/admin.module';
+import { PaymentsModule } from '../payments/payments.module';
+import { MaterialsCheckoutService } from './materials-checkout.service';
+import { MaterialsFulfilment } from './materials.fulfilment';
 
 @Module({
   imports: [
@@ -19,9 +22,12 @@ import { AdminModule } from '../admin/admin.module';
       { name: MaterialPurchase.name, schema: MaterialPurchaseSchema },
     ]),
     AdminModule,
+    // Materials are sold through the shared payments ledger, so the platform
+    // commission applies to them like any other revenue area.
+    PaymentsModule,
   ],
-  providers: [TutorMaterialsService],
+  providers: [TutorMaterialsService, MaterialsCheckoutService, MaterialsFulfilment],
   controllers: [TutorMaterialsController],
-  exports: [TutorMaterialsService],
+  exports: [TutorMaterialsService, MaterialsCheckoutService],
 })
 export class TutorMaterialsModule {}
