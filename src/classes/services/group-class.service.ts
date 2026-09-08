@@ -7,6 +7,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { randomBytes } from 'crypto';
 import { Model, Types } from 'mongoose';
+import { PlatformSettingsService } from '../../payments/services/platform-settings.service';
 import { User, UserDocument } from '../../users/schemas/user.schema';
 import {
   ClassSession,
@@ -40,6 +41,8 @@ export interface GroupClassPreview {
   startTime: Date;
   endTime: Date;
   price: number;
+  /** What `price` is denominated in — a bare number is not a price. */
+  currency: string;
   maxStudents: number;
   seatsLeft: number;
   open: boolean;
@@ -65,6 +68,7 @@ export class GroupClassService {
     private readonly classSessionModel: Model<ClassSessionDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    private readonly settings: PlatformSettingsService,
   ) {}
 
   /**
@@ -292,6 +296,7 @@ export class GroupClassService {
       startTime: cls.startTime,
       endTime: cls.endTime,
       price: cls.price,
+      currency: await this.settings.currency(),
       maxStudents: cls.maxStudents,
       seatsLeft: GroupClassService.freeSeats(cls as any),
       open: cls.status === ClassStatus.SCHEDULED,

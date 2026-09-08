@@ -50,7 +50,9 @@ afterAll(async () => {
 beforeEach(async () => {
   await model.deleteMany({});
   await userModel.deleteMany({});
-  service = new GroupClassService(model, userModel as any);
+  service = new GroupClassService(model, userModel as any, {
+    currency: jest.fn().mockResolvedValue('USD'),
+  } as any);
 });
 
 /** A group class with `seats` seats, open for joining. */
@@ -406,5 +408,26 @@ describe('checking whether a student may join', () => {
     await expect(
       service.loadJoinable(classId, newStudent()),
     ).rejects.toThrow(/not open/i);
+  });
+});
+
+describe('the price on an invite', () => {
+  /**
+   * "900" is not a price. Without the platform's currency the student cannot
+   * tell 900 pesos from 900 dollars, so the preview carries it.
+   */
+  it('says which currency the seat price is in', async () => {
+    const created = await service.createGroupClass(TUTOR, {
+      title: 'Priced class',
+      description: 'x',
+      startTime: new Date(Date.now() + 86_400_000),
+      endTime: new Date(Date.now() + 90_000_000),
+      maxStudents: 4,
+      price: 900,
+    });
+
+    const preview = await service.findByInviteToken(created.inviteToken!);
+
+    expect(preview.currency).toBe('USD');
   });
 });
