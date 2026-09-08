@@ -174,7 +174,11 @@ export class AdminService {
     ];
     for (let i = 0; i < months; i++) {
       const d = new Date(
-        Date.UTC(windowStart.getUTCFullYear(), windowStart.getUTCMonth() + i, 1),
+        Date.UTC(
+          windowStart.getUTCFullYear(),
+          windowStart.getUTCMonth() + i,
+          1,
+        ),
       );
       const y = d.getUTCFullYear();
       const m = d.getUTCMonth();

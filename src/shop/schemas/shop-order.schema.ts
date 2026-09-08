@@ -70,7 +70,10 @@ export class ShopOrder {
    * @deprecated Superseded by `paymentId`. Kept so existing orders and the
    * unique index they rely on keep working.
    */
-  @ApiProperty({ description: 'Legacy Stripe PaymentIntent ID', required: false })
+  @ApiProperty({
+    description: 'Legacy Stripe PaymentIntent ID',
+    required: false,
+  })
   @Prop({ type: String, required: false, default: null })
   stripePaymentIntentId: string | null;
 
@@ -93,6 +96,9 @@ ShopOrderSchema.index(
 );
 ShopOrderSchema.index(
   { stripePaymentIntentId: 1 },
-  { unique: true, partialFilterExpression: { stripePaymentIntentId: { $type: 'string' } } },
+  {
+    unique: true,
+    partialFilterExpression: { stripePaymentIntentId: { $type: 'string' } },
+  },
 );
 ShopOrderSchema.index({ createdAt: -1 });

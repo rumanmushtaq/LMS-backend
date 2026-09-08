@@ -21,7 +21,7 @@ import {
   DeclineClassDto,
 } from '../dto/create-class.dto';
 import { UpdateClassDto } from '../dto/update-class.dto';
-import { VimeoService } from '../../vimeo/vimeo.service';
+import { LiveStreamingService } from '../../live/live-streaming.service';
 import { ChatService } from '../../chat/chat.service';
 import { ChatGateway } from '../../chat/chat.gateway';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -68,7 +68,7 @@ export class ClassesService {
     @InjectModel(ClassSession.name)
     private classSessionModel: Model<ClassSessionDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    private readonly vimeoService: VimeoService,
+    private readonly liveStreaming: LiveStreamingService,
     private readonly chatService: ChatService,
     private readonly chatGateway: ChatGateway,
     private readonly notificationsService: NotificationsService,
@@ -337,11 +337,8 @@ export class ClassesService {
       throw new BadRequestException('A completed class cannot be cancelled');
     }
 
-    // Tear down the Vimeo live event if one was provisioned (non-blocking).
-    const eventId = classSession.liveSession?.vimeoEventId;
-    if (eventId) {
-      await this.vimeoService.deleteLiveEvent(eventId);
-    }
+    // Tear down the live event if one was provisioned (non-blocking).
+    await this.liveStreaming.teardown(classSession.liveSession);
 
     classSession.status = ClassStatus.CANCELLED;
     classSession.cancelReason = reason ?? null;
@@ -734,17 +731,23 @@ export class ClassesService {
       );
     }
 
-    // Tear down the Vimeo live event if one was provisioned (non-blocking).
-    const eventId = classSession.liveSession?.vimeoEventId;
-    if (eventId) {
-      await this.vimeoService.deleteLiveEvent(eventId);
-    }
+    // Tear down the live event if one was provisioned (non-blocking).
+    await this.liveStreaming.teardown(classSession.liveSession);
 
     await this.classSessionModel.findByIdAndDelete(id).exec();
   }
 
   async enrollStudent(id: string, studentId: string): Promise<ClassSession> {
     const classSession = await this.findOne(id);
+
+    // Seats in a group class are paid for. This route adds the caller with no
+    // payment at all, so letting it touch a group class would give away a
+    // seat — they are granted only by GroupClassFulfilment once money settles.
+    if ((classSession as any).visibility === 'group') {
+      throw new BadRequestException(
+        'Seats in a group class are bought, not claimed — use the class invite link',
+      );
+    }
 
     const isEnrolled = classSession.students.some(
       (student: any) => student._id.toString() === studentId,
@@ -760,7 +763,7 @@ export class ClassesService {
     return classSession.save();
   }
 
-  // ─── Live class (Vimeo broadcast + Q&A chat) ─────────────────────────────────
+  // ─── Live class (Vimeo/YouTube broadcast + Q&A chat) ─────────────────────────
 
   private assertTutorOwns(classSession: ClassSession, tutorId: string) {
     const ownerId =
@@ -786,7 +789,7 @@ export class ClassesService {
   }
 
   /**
-   * Provision (idempotently) the Vimeo live event + Q&A conversation for a
+   * Provision (idempotently) the live broadcast + Q&A conversation for a
    * class, then return the tutor's broadcast credentials. Tutor-only.
    */
   async setupLive(classId: string, tutorId: string) {
@@ -799,10 +802,13 @@ export class ClassesService {
       );
     }
 
-    // Create the Vimeo event once.
-    if (!classSession.liveSession?.vimeoEventId) {
-      const event = await this.vimeoService.createLiveEvent(classSession.title);
-      classSession.liveSession.vimeoEventId = event.eventId;
+    // Create the broadcast once, on whichever provider is configured.
+    if (!this.liveStreaming.hasEvent(classSession.liveSession)) {
+      const event = await this.liveStreaming.provision(classSession.title);
+      classSession.liveSession.provider = event.provider;
+      classSession.liveSession.vimeoEventId = event.vimeoEventId;
+      classSession.liveSession.youtubeBroadcastId = event.youtubeBroadcastId;
+      classSession.liveSession.youtubeStreamId = event.youtubeStreamId;
       classSession.liveSession.rtmpUrl = event.rtmpUrl;
       classSession.liveSession.streamKey = event.streamKey;
       classSession.liveSession.embedUrl = event.embedUrl;
@@ -811,10 +817,8 @@ export class ClassesService {
       !classSession.liveSession.rtmpUrl ||
       !classSession.liveSession.streamKey
     ) {
-      // Credentials weren't captured yet — re-fetch from Vimeo.
-      const event = await this.vimeoService.getLiveEvent(
-        classSession.liveSession.vimeoEventId,
-      );
+      // Credentials weren't captured yet — re-fetch from the owning provider.
+      const event = await this.liveStreaming.refresh(classSession.liveSession);
       classSession.liveSession.rtmpUrl = event.rtmpUrl;
       classSession.liveSession.streamKey = event.streamKey;
       classSession.liveSession.embedUrl = event.embedUrl;
@@ -822,8 +826,9 @@ export class ClassesService {
 
     // Create the shared Q&A conversation once.
     if (!classSession.liveSession?.conversationId) {
-      const convo = await this.chatService.createConversation(
+      const convo = await this.chatService.createClassConversation(
         this.participantIds(classSession),
+        (classSession._id as Types.ObjectId).toString(),
       );
       classSession.liveSession.conversationId = convo._id as Types.ObjectId;
     }
@@ -837,7 +842,7 @@ export class ClassesService {
     const classSession = await this.findOne(classId);
     this.assertTutorOwns(classSession, tutorId);
 
-    if (!classSession.liveSession?.vimeoEventId) {
+    if (!this.liveStreaming.hasEvent(classSession.liveSession)) {
       // Not set up yet — provision now.
       return this.setupLive(classId, tutorId);
     }
@@ -874,6 +879,7 @@ export class ClassesService {
       endTime: classSession.endTime,
       live: {
         status: live?.status ?? LiveStatus.IDLE,
+        provider: this.liveStreaming.providerOf(live),
         embedUrl: live?.embedUrl ?? null,
         conversationId: live?.conversationId?.toString() ?? null,
         recordingUrl: live?.recordingUrl ?? null,
@@ -886,7 +892,7 @@ export class ClassesService {
     const classSession = await this.findOne(classId);
     this.assertTutorOwns(classSession, tutorId);
 
-    if (!classSession.liveSession?.vimeoEventId) {
+    if (!this.liveStreaming.hasEvent(classSession.liveSession)) {
       throw new BadRequestException(
         'Set up the live session before going live',
       );
@@ -937,6 +943,12 @@ export class ClassesService {
     await classSession.save();
 
     this.emitLiveStatus(classSession, LiveStatus.ENDED);
+
+    // Best-effort: complete the broadcast on its provider (and, for YouTube
+    // in live-only mode, remove the auto-archived video). The facade never
+    // throws here — a provider hiccup must not block ending the class.
+    await this.liveStreaming.end(classSession.liveSession);
+
     return this.watchSummary(classSession);
   }
 
@@ -946,12 +958,17 @@ export class ClassesService {
       classId: (classSession._id as Types.ObjectId).toString(),
       title: classSession.title,
       status: live.status,
+      // Schedule, so the tutor page can count down to the start.
+      startTime: classSession.startTime,
+      endTime: classSession.endTime,
       // Broadcaster secrets — only ever returned from this tutor-guarded path.
       rtmpUrl: live.rtmpUrl,
       streamKey: live.streamKey,
       embedUrl: live.embedUrl,
       conversationId: live.conversationId?.toString() ?? null,
+      provider: live.provider ?? 'vimeo',
       vimeoEventId: live.vimeoEventId,
+      youtubeBroadcastId: live.youtubeBroadcastId ?? null,
     };
   }
 

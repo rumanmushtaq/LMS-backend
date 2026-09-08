@@ -196,7 +196,9 @@ export class ShopService implements OnModuleInit, FulfilmentHandler {
 
     order.status = 'failed';
     await order.save();
-    this.logger.log(`Order ${orderId} marked failed${reason ? `: ${reason}` : ''}`);
+    this.logger.log(
+      `Order ${orderId} marked failed${reason ? `: ${reason}` : ''}`,
+    );
   }
 
   // ─── Get My Orders ────────────────────────────────────────────────────────────
