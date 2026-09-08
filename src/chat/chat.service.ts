@@ -23,13 +23,19 @@ export class ChatService {
     participants: string[],
   ): Promise<ConversationDocument> {
     const participantIds = participants.map((p) => new Types.ObjectId(p));
+    // A class Q&A room has the same two participants, so matching on those
+    // alone could hand back the class thread instead of the private one.
+    // Legacy rows have no `type` at all and are private chats, hence $ne
+    // rather than an equality test.
     let conversation = await this.conversationModel.findOne({
       participants: { $all: participantIds, $size: participantIds.length },
+      type: { $ne: 'class' },
     });
 
     if (!conversation) {
       conversation = await this.conversationModel.create({
         participants: participantIds,
+        type: 'dm',
       });
     }
 
@@ -162,12 +168,22 @@ export class ChatService {
     return message;
   }
 
-  /** Create a fresh (possibly group) conversation — used for class Q&A rooms. */
-  async createConversation(
+  /**
+   * The Q&A room for one class.
+   *
+   * Marked as a class thread so it never surfaces in the chat list beside the
+   * students' private conversations — on a one-to-one class the two are
+   * otherwise indistinguishable, and every class the tutor ran showed up as
+   * another chat with the same student.
+   */
+  async createClassConversation(
     participants: string[],
+    classId: string,
   ): Promise<ConversationDocument> {
     return this.conversationModel.create({
       participants: participants.map((p) => new Types.ObjectId(p)),
+      type: 'class',
+      classId: new Types.ObjectId(classId),
     });
   }
 
@@ -196,7 +212,8 @@ export class ChatService {
     const viewerId = new Types.ObjectId(userId);
 
     const conversations = await this.conversationModel
-      .find({ participants: viewerId })
+      // Private chats only. Class Q&A rooms are reached from the class itself.
+      .find({ participants: viewerId, type: { $ne: 'class' } })
       .populate('participants', 'firstName lastName email role')
       .lean()
       .exec();

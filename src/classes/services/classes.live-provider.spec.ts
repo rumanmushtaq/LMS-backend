@@ -34,7 +34,7 @@ function makeService() {
     teardown: jest.fn().mockResolvedValue(undefined),
   };
   const chatService: any = {
-    createConversation: jest.fn().mockResolvedValue({ _id: 'conv-1' }),
+    createClassConversation: jest.fn().mockResolvedValue({ _id: 'conv-1' }),
     addParticipant: jest.fn().mockResolvedValue({}),
   };
   const chatGateway: any = {

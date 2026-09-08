@@ -826,8 +826,9 @@ export class ClassesService {
 
     // Create the shared Q&A conversation once.
     if (!classSession.liveSession?.conversationId) {
-      const convo = await this.chatService.createConversation(
+      const convo = await this.chatService.createClassConversation(
         this.participantIds(classSession),
+        (classSession._id as Types.ObjectId).toString(),
       );
       classSession.liveSession.conversationId = convo._id as Types.ObjectId;
     }
