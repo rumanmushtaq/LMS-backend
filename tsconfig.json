@@ -19,15 +19,35 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@/*": ["src/*"],
-      "@auth/*": ["src/auth/*"],
-      "@users/*": ["src/users/*"],
-      "@admin/*": ["src/admin/*"],
-      "@common/*": ["src/common/*"],
-      "@config/*": ["src/config/*"],
-      "@database/*": ["src/database/*"],
-      "@email/*": ["src/email/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@auth/*": [
+        "src/auth/*"
+      ],
+      "@users/*": [
+        "src/users/*"
+      ],
+      "@admin/*": [
+        "src/admin/*"
+      ],
+      "@common/*": [
+        "src/common/*"
+      ],
+      "@config/*": [
+        "src/config/*"
+      ],
+      "@database/*": [
+        "src/database/*"
+      ],
+      "@email/*": [
+        "src/email/*"
+      ]
     }
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "live-hls"
+  ]
 }
-

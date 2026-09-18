@@ -15,6 +15,23 @@ export class Conversation extends Document {
   })
   participants: mongoose.Types.ObjectId[];
 
+  /**
+   * What kind of thread this is.
+   *
+   * A class Q&A room holds the tutor and that class's students, which on a
+   * one-to-one class is the same two people as their private chat — identical
+   * in shape, so nothing but this field can tell them apart. Documents written
+   * before this existed have no `type`; they are all private chats, so every
+   * query treats "missing" as 'dm' rather than filtering them away.
+   */
+  @ApiProperty({ description: "'dm' (private chat) or 'class' (Q&A room)" })
+  @Prop({ type: String, enum: ['dm', 'class'], default: 'dm' })
+  type: 'dm' | 'class';
+
+  @ApiProperty({ description: 'The class a Q&A room belongs to' })
+  @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'ClassSession', default: null })
+  classId: mongoose.Types.ObjectId | null;
+
   @ApiProperty({ description: 'Is the conversation blocked?' })
   @Prop({ type: Boolean, default: false })
   isBlocked: boolean;
@@ -26,3 +43,5 @@ export class Conversation extends Document {
 
 export const ConversationSchema = SchemaFactory.createForClass(Conversation);
 ConversationSchema.index({ participants: 1 });
+// The chat list and the DM lookup both filter on kind.
+ConversationSchema.index({ participants: 1, type: 1 });

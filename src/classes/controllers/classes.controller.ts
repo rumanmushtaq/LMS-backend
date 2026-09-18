@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ClassesService } from '../services/classes.service';
+import { GroupClassService } from '../services/group-class.service';
 import {
   CreateClassDto,
   RequestClassDto,
@@ -19,6 +20,11 @@ import {
   DeclineClassDto,
 } from '../dto/create-class.dto';
 import { CancelClassDto, UpdateClassDto } from '../dto/update-class.dto';
+import {
+  CreateGroupClassDto,
+  PurchaseSeatDto,
+} from '../dto/group-class.dto';
+import { GroupClassCheckoutService } from '../services/group-class-checkout.service';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -29,7 +35,11 @@ import { UserRole } from '../../users/schemas/user.schema';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ClassesController {
-  constructor(private readonly classesService: ClassesService) {}
+  constructor(
+    private readonly classesService: ClassesService,
+    private readonly groupClasses: GroupClassService,
+    private readonly groupCheckout: GroupClassCheckoutService,
+  ) {}
 
   // ─── Tutor / Admin: direct class creation ────────────────────────────────────
   @Post()
@@ -45,6 +55,79 @@ export class ClassesController {
   @ApiOperation({ summary: 'Student requests a class from a specific tutor' })
   requestClass(@Req() req: any, @Body() dto: RequestClassDto) {
     return this.classesService.requestClass(req.user._id.toString(), dto);
+  }
+
+  // ─── Group classes ───────────────────────────────────────────────────────────
+  // Registered ahead of the ':id' routes so 'invite/...' is never swallowed
+  // by the class-id parameter.
+
+  @Post('group')
+  @Roles(UserRole.TUTOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Open a group class and get its invite link (Tutor)' })
+  createGroupClass(@Req() req: any, @Body() dto: CreateGroupClassDto) {
+    return this.groupClasses.createGroupClass(req.user._id.toString(), {
+      title: dto.title,
+      description: dto.description,
+      startTime: new Date(dto.startTime),
+      endTime: new Date(dto.endTime),
+      maxStudents: dto.maxStudents,
+      price: dto.price,
+    });
+  }
+
+  @Get('invite/:token')
+  @ApiOperation({ summary: 'What an invite link offers: price and seats left' })
+  invitePreview(@Param('token') token: string) {
+    return this.groupClasses.findByInviteToken(token);
+  }
+
+  // The only route to a seat. There is deliberately no "enroll me" endpoint:
+  // membership is granted by settled payment, in GroupClassFulfilment.
+  @Post(':id/purchase')
+  @Roles(UserRole.STUDENT)
+  @ApiOperation({ summary: 'Pay for a seat in a group class (Student)' })
+  purchaseSeat(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: PurchaseSeatDto,
+  ) {
+    return this.groupCheckout.startSeatPurchase(
+      id,
+      req.user._id.toString(),
+      dto.paymentMethod,
+      req.user.email,
+    );
+  }
+
+  @Get(':id/roster')
+  @Roles(UserRole.TUTOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Who is enrolled and who has left (Tutor)' })
+  roster(@Req() req: any, @Param('id') id: string) {
+    return this.groupClasses.roster(id, req.user._id.toString());
+  }
+
+  // Leaving is permanent: the seat is freed for someone else, and this
+  // student can never rejoin this class.
+  @Post(':id/leave')
+  @Roles(UserRole.STUDENT)
+  @ApiOperation({ summary: 'Leave a group class for good (Student)' })
+  leaveClass(@Req() req: any, @Param('id') id: string) {
+    return this.groupClasses.leave(id, req.user._id.toString());
+  }
+
+  @Delete(':id/students/:studentId')
+  @Roles(UserRole.TUTOR, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Remove a student from a group class (Tutor)' })
+  removeStudent(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Param('studentId') studentId: string,
+  ) {
+    return this.groupClasses.removeByTutor(
+      id,
+      req.user._id.toString(),
+      studentId,
+    );
   }
 
   // ─── Tutor: get all pending requests for them ────────────────────────────────

@@ -103,7 +103,10 @@ export function emailLinkFallback(url: string): string {
 }
 
 /** A soft callout for expiry windows and security notes. */
-export function emailNotice(text: string, colour: string = BRAND.accent): string {
+export function emailNotice(
+  text: string,
+  colour: string = BRAND.accent,
+): string {
   return `
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
   <tr>

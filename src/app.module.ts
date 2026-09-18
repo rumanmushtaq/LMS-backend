@@ -18,6 +18,9 @@ import {
   pseConfig,
   vimeoConfig,
   validateEnv,
+  liveConfig,
+  ingestConfig,
+  youtubeConfig,
 } from './config';
 
 // Modules
@@ -45,6 +48,8 @@ import { ChatModule } from './chat/chat.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { TutorMaterialsModule } from './tutor-materials/tutor-materials.module';
 import { ClassesModule } from './classes/classes.module';
+import { IngestModule } from './ingest/ingest.module';
+import { LiveHlsModule } from './live/live-hls.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecurityModule } from './security/security.module';
 import { IpSecurityMiddleware } from './security/middleware/ip-security.middleware';
@@ -66,6 +71,9 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
         stripeConfig,
         pseConfig,
         vimeoConfig,
+        liveConfig,
+        ingestConfig,
+        youtubeConfig,
       ],
       validate: validateEnv,
       envFilePath: ['.env.local', '.env'],
@@ -103,6 +111,8 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
     NotificationsModule,
     TutorMaterialsModule,
     ClassesModule,
+    IngestModule,
+    LiveHlsModule,
     PaymentsModule,
     SecurityModule,
   ],
