@@ -52,6 +52,7 @@ import { IngestModule } from './ingest/ingest.module';
 import { LiveHlsModule } from './live/live-hls.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SecurityModule } from './security/security.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { IpSecurityMiddleware } from './security/middleware/ip-security.middleware';
 
 @Module({
@@ -115,6 +116,7 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
     LiveHlsModule,
     PaymentsModule,
     SecurityModule,
+    DashboardModule,
   ],
   providers: [
     // Global JWT Auth Guard
