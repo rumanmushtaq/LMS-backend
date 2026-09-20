@@ -390,6 +390,43 @@ describe('DashboardService — role branching', () => {
     expect(result.materialsOwned).toBeUndefined();
   });
 
+  describe('isGroup on nextClasses', () => {
+    const privateLesson = {
+      _id: oid('5ddddddddddddddddddddd16'),
+      title: 'One to one',
+      startTime: new Date('2026-09-21T13:00:00.000Z'),
+      endTime: new Date('2026-09-21T14:00:00.000Z'),
+      status: ClassStatus.SCHEDULED,
+      students: [oid(STUDENT_ID)],
+      // Private classes default to a cap of 1, which is why maxStudents alone
+      // cannot tell them apart from a full one-seat group class.
+      maxStudents: 1,
+      visibility: 'private' as const,
+    };
+
+    it('marks a private lesson as not a group class', async () => {
+      const { service } = build({ nextClasses: [privateLesson] });
+
+      const result: any = await service.getSummary(tutor());
+
+      expect(result.nextClasses[0]).toMatchObject({
+        enrolled: 1,
+        maxStudents: 1,
+        isGroup: false,
+      });
+    });
+
+    it('marks a group class as one', async () => {
+      const { service } = build({
+        nextClasses: [{ ...privateLesson, visibility: 'group' as const }],
+      });
+
+      const result: any = await service.getSummary(tutor());
+
+      expect(result.nextClasses[0].isGroup).toBe(true);
+    });
+  });
+
   it('refuses an admin rather than inventing a role-neutral summary', async () => {
     const { service } = build();
     await expect(

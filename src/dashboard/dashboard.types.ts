@@ -28,6 +28,15 @@ export interface StudentNextClass extends DashboardNextClassBase {
 export interface TutorNextClass extends DashboardNextClassBase {
   enrolled: number;
   maxStudents: number | null;
+  /**
+   * Whether this is a group class.
+   *
+   * `maxStudents` cannot answer that on its own: it defaults to 1 for a
+   * private lesson, so a booked 1-to-1 and a full one-seat group class are
+   * identical without this flag — and rendering "1 of 1 seats filled" over a
+   * private lesson would be wrong.
+   */
+  isGroup: boolean;
 }
 
 export interface UnreadCounts {

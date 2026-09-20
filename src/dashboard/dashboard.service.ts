@@ -58,6 +58,7 @@ interface LeanNextClass {
   endTime: Date;
   status: ClassStatus;
   maxStudents?: number | null;
+  visibility?: 'private' | 'group' | null;
   students?: Types.ObjectId[];
   liveSession?: { status?: LiveStatus | string | null } | null;
   tutorId?:
@@ -238,7 +239,7 @@ export class DashboardService {
       this.classSessionModel
         .find({ ...scope, ...this.nextClassesFilter(now) })
         .select(
-          'title startTime endTime status liveSession.status students maxStudents',
+          'title startTime endTime status liveSession.status students maxStudents visibility',
         )
         .sort({ startTime: 1 })
         .limit(NEXT_CLASSES_LIMIT)
@@ -501,6 +502,7 @@ export class DashboardService {
       // Null rather than 0 for a class with no declared limit — "no cap" and
       // "no seats" are different things and the frontend renders them apart.
       maxStudents: typeof row.maxStudents === 'number' ? row.maxStudents : null,
+      isGroup: row.visibility === 'group',
     };
   }
 
