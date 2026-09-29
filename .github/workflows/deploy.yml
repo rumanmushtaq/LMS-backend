@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - prod
+  # Manual trigger. A push is otherwise the only way in, so a single missed
+  # push event strands prod with no way to retry — which is exactly what
+  # happened when PR #26 merged on 2026-09-29 and raised no push event,
+  # leaving prod on the 2026-09-18 build.
+  workflow_dispatch:
 
 jobs:
   deploy:
