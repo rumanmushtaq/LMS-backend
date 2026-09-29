@@ -10,21 +10,39 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { ChatService } from './chat.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/schemas/user.schema';
+import { UploadService } from '../admin/services/upload.service';
+import {
+  assertAllowedUpload,
+  MAX_ATTACHMENT_BYTES,
+} from './attachment.validation';
 
 @ApiTags('Chat')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly uploadService: UploadService,
+  ) {}
 
   private userIdOf(req: Request & { user: any }): string {
     return req?.user?._id || req?.user?.userId;
@@ -110,6 +128,58 @@ export class ChatController {
     await this.chatService.assertParticipant(conversationId, userId);
 
     return this.chatService.markConversationRead(conversationId, userId);
+  }
+
+  /**
+   * Upload a chat attachment.
+   *
+   * Scoped to a conversation on purpose: without `conversationId` and the
+   * participant check, any logged-in user could use this as free file hosting.
+   */
+  @Post('upload')
+  @ApiOperation({
+    summary: 'Upload a file to send in a conversation (max 25MB)',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        conversationId: { type: 'string' },
+      },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_ATTACHMENT_BYTES } }),
+  )
+  async uploadAttachment(
+    @Req() req: Request & { user: any },
+    @UploadedFile() file: Express.Multer.File,
+    @Body('conversationId') conversationId: string,
+  ) {
+    if (!conversationId) {
+      throw new BadRequestException('conversationId is required');
+    }
+
+    await this.chatService.assertParticipant(
+      conversationId,
+      this.userIdOf(req),
+    );
+    assertAllowedUpload(file);
+
+    const stored = await this.uploadService.uploadFile(
+      file,
+      'chat-attachments',
+    );
+
+    return {
+      url: stored.url,
+      // The sender's filename, not the timestamped one storage generated.
+      name: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+    };
   }
 
   @ApiOperation({ summary: 'Flag a message' })

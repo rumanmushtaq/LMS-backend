@@ -31,21 +31,10 @@ import {
   UserRole,
   UserStatus,
 } from '../../users/schemas/user.schema';
-
-/**
- * A tutor cancelling on the same student this many times triggers an
- * automatic suspension and an admin alert. Counted over all time — a tutor
- * who repeatedly strands the same student is a trust problem, not a
- * scheduling accident.
- */
-const TUTOR_CANCELLATIONS_PER_STUDENT_LIMIT = 3;
-
-/**
- * A tutor who lets this many scheduled classes pass without ever starting
- * them (no-shows) is auto-suspended. Unlike cancellations this is not
- * per-student — a serial no-show harms whoever was enrolled.
- */
-const TUTOR_MISSED_CLASSES_LIMIT = 3;
+import {
+  TUTOR_CANCELLATIONS_PER_STUDENT_LIMIT,
+  TUTOR_MISSED_CLASSES_LIMIT,
+} from '../classes.constants';
 
 /** How often the missed-class sweep runs. */
 const MISSED_SWEEP_INTERVAL_MS = 5 * 60 * 1000;

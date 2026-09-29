@@ -10,6 +10,7 @@ import {
   ConversationDocument,
 } from './schemas/conversation.schema';
 import { Message, MessageDocument } from './schemas/message.schema';
+import { ChatAttachment } from './attachment.validation';
 
 @Injectable()
 export class ChatService {
@@ -199,11 +200,13 @@ export class ChatService {
     conversationId: string,
     senderId: string,
     content: string,
+    attachment: ChatAttachment | null = null,
   ): Promise<MessageDocument> {
     const message = await this.messageModel.create({
       conversationId: new Types.ObjectId(conversationId),
       senderId: new Types.ObjectId(senderId),
       content,
+      attachment,
     });
     return message;
   }

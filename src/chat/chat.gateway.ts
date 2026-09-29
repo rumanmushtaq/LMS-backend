@@ -19,6 +19,11 @@ import { resolveClientIp } from '../common/utils';
 import { IpBlockService } from '../security/services/ip-block.service';
 import { IpActivityService } from '../security/services/ip-activity.service';
 import { SessionService } from '../auth/services/session.service';
+import {
+  sanitizeAttachment,
+  attachmentPreview,
+  ChatAttachment,
+} from './attachment.validation';
 
 /**
  * Upper bound on a single chat message.
@@ -250,7 +255,12 @@ export class ChatGateway
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() payload: { conversationId: string; content: string },
+    @MessageBody()
+    payload: {
+      conversationId: string;
+      content?: string;
+      attachment?: unknown;
+    },
   ) {
     return this.enqueue(payload.conversationId, () =>
       this.deliverMessage(client.data.userId, payload),
@@ -259,7 +269,11 @@ export class ChatGateway
 
   private async deliverMessage(
     senderId: string,
-    payload: { conversationId: string; content: string },
+    payload: {
+      conversationId: string;
+      content?: string;
+      attachment?: unknown;
+    },
   ) {
     const { conversationId } = payload;
 
@@ -270,7 +284,18 @@ export class ChatGateway
     const content =
       typeof payload.content === 'string' ? payload.content.trim() : '';
 
-    if (!content) {
+    // A file on its own is a message. Only reject when there is neither.
+    let attachment: ChatAttachment | null;
+    try {
+      attachment = sanitizeAttachment(
+        payload.attachment,
+        this.configService.get<string>('imagekit.urlEndpoint'),
+      );
+    } catch (error: any) {
+      throw new WsException(error?.message ?? 'Invalid attachment');
+    }
+
+    if (!content && !attachment) {
       throw new WsException('Message cannot be empty');
     }
 
@@ -305,6 +330,7 @@ export class ChatGateway
       conversationId,
       senderId,
       content,
+      attachment,
     );
     const participantIds = conversation.participants.map((p) => p.toString());
 
@@ -344,7 +370,7 @@ export class ChatGateway
       await this.notificationsService.create({
         userId: participantId,
         title: senderName || 'New Message',
-        content: message.content,
+        content: content || attachmentPreview(attachment!),
         type: 'chat_message',
         senderId,
         actionPayload: { conversationId, senderId, senderName },
