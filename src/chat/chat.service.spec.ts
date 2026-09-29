@@ -166,3 +166,48 @@ describe('getMessages (opens on the newest messages)', () => {
     expect(res.map((m: any) => m._id)).toEqual(['m1', 'm2', 'm3']);
   });
 });
+
+describe('saveMessage with an attachment', () => {
+  // saveMessage casts the id to an ObjectId, so it has to be a real one.
+  const CONV_ID = '5eeeeeeeeeeeeeeeeeeeeee5';
+
+  const attachment = {
+    url: 'https://ik.imagekit.io/varona/chat-attachments/1-worksheet.pdf',
+    name: 'worksheet.pdf',
+    mimeType: 'application/pdf',
+    size: 2048,
+  };
+
+  it('stores the attachment alongside the text', async () => {
+    const { service, messageModel } = build();
+    messageModel.create = jest.fn().mockResolvedValue({ _id: MSG });
+
+    await service.saveMessage(CONV_ID, A, 'here you go', attachment);
+
+    expect(messageModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'here you go', attachment }),
+    );
+  });
+
+  it('stores an attachment sent with no caption', async () => {
+    const { service, messageModel } = build();
+    messageModel.create = jest.fn().mockResolvedValue({ _id: MSG });
+
+    await service.saveMessage(CONV_ID, A, '', attachment);
+
+    expect(messageModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ content: '', attachment }),
+    );
+  });
+
+  it('stores null when there is no attachment', async () => {
+    const { service, messageModel } = build();
+    messageModel.create = jest.fn().mockResolvedValue({ _id: MSG });
+
+    await service.saveMessage(CONV_ID, A, 'plain text');
+
+    expect(messageModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'plain text', attachment: null }),
+    );
+  });
+});
