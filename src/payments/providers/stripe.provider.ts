@@ -155,6 +155,14 @@ export class StripeProvider implements PaymentProvider {
     return this.toState(intent, status);
   }
 
+  async refund(providerRef: string, amountMinor?: number): Promise<void> {
+    await this.client().refunds.create(
+      amountMinor === undefined
+        ? { payment_intent: providerRef }
+        : { payment_intent: providerRef, amount: amountMinor },
+    );
+  }
+
   private toState(
     intent: PaymentIntentLike,
     status: PaymentStatus,

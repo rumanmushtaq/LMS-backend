@@ -158,5 +158,6 @@ export const pseConfig = registerAs('pse', () => ({
   apiKey: process.env.PSE_API_KEY,
   apiSecret: process.env.PSE_API_SECRET,
   webhookSecret: process.env.PSE_WEBHOOK_SECRET,
+  integritySecret: process.env.PSE_INTEGRITY_SECRET,
   baseUrl: process.env.PSE_BASE_URL,
 }));

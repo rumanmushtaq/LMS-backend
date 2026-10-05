@@ -86,4 +86,10 @@ export interface PaymentProvider {
 
   /** Authoritative status, used to reconcile when a webhook was missed. */
   fetchPaymentState(providerRef: string): Promise<ProviderPaymentState>;
+
+  /**
+   * Refunds a settled payment. Full refund when `amountMinor` is omitted,
+   * partial otherwise. Providers that cannot refund programmatically throw.
+   */
+  refund(providerRef: string, amountMinor?: number): Promise<void>;
 }
