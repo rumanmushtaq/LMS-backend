@@ -84,6 +84,18 @@ export class ShopService implements OnModuleInit, FulfilmentHandler {
     await this.failOrder(referenceId, reason);
   }
 
+  /** FulfilmentHandler — a refunded payment marks its order refunded. */
+  async onRefunded(referenceId: string): Promise<void> {
+    const order = await this.shopOrderModel.findById(referenceId);
+    if (!order) {
+      this.logger.warn(`Cannot refund unknown order ${referenceId}`);
+      return;
+    }
+    order.status = 'refunded';
+    await order.save();
+    this.logger.log(`Order ${referenceId} marked refunded`);
+  }
+
   // ─── Checkout ─────────────────────────────────────────────────────────────
 
   /**

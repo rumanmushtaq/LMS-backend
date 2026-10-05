@@ -5,6 +5,7 @@ import {
   Patch,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
   HttpCode,
@@ -22,7 +23,12 @@ import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../users/schemas/user.schema';
 import { PaymentsService } from './services/payments.service';
 import { PlatformSettingsService } from './services/platform-settings.service';
+import { AdminTransactionsService } from './services/admin-transactions.service';
 import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
+import {
+  QueryTransactionsDto,
+  RefundTransactionDto,
+} from './dto/query-transactions.dto';
 
 /** Raw body is needed for signature verification — see main.ts. */
 type RawBodyRequest = Request & { rawBody?: Buffer };
@@ -35,6 +41,7 @@ export class PaymentsController {
   constructor(
     private readonly payments: PaymentsService,
     private readonly settings: PlatformSettingsService,
+    private readonly transactions: AdminTransactionsService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -115,6 +122,56 @@ export class PaymentsController {
   ) {
     const adminId = req?.user?._id || req?.user?.userId;
     return this.settings.update(dto, adminId);
+  }
+
+  // ─── Admin: transactions (the payment ledger) ───────────────────────────
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Get('transactions')
+  @ApiOperation({ summary: '[Admin] List transactions (the payment ledger)' })
+  listTransactions(@Query() query: QueryTransactionsDto) {
+    return this.transactions.list(query);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Get('transactions/summary')
+  @ApiOperation({ summary: '[Admin] Transaction totals by status' })
+  transactionsSummary(@Query() query: QueryTransactionsDto) {
+    return this.transactions.summary(query);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Get('transactions/:id')
+  @ApiOperation({ summary: '[Admin] One transaction' })
+  getTransaction(@Param('id') id: string) {
+    return this.transactions.getOne(id);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Post('transactions/:id/refund')
+  @ApiOperation({ summary: '[Admin] Refund a paid transaction' })
+  refundTransaction(
+    @Param('id') id: string,
+    @Body() dto: RefundTransactionDto,
+  ) {
+    return this.transactions.refund(id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Post('transactions/:id/reconcile')
+  @ApiOperation({ summary: '[Admin] Re-poll the provider and sync status' })
+  reconcileTransaction(@Param('id') id: string) {
+    return this.transactions.reconcile(id);
   }
 
   // ─── Seller balance ─────────────────────────────────────────────────────
