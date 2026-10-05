@@ -253,6 +253,16 @@ describe('fulfilment — only a settled payment marks an order paid', () => {
     const { service } = build({ order: null });
     await expect(service.onPaid('missing')).resolves.toBeUndefined();
   });
+
+  it('marks the order refunded when the payment is refunded', async () => {
+    const order = { _id: 'order-1', status: 'paid', save: jest.fn() };
+    const { service } = build({ order });
+
+    await service.onRefunded('order-1');
+
+    expect(order.status).toBe('refunded');
+    expect(order.save).toHaveBeenCalled();
+  });
 });
 
 describe('registration', () => {

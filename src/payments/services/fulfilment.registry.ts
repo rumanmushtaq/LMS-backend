@@ -11,6 +11,8 @@ import { PaymentDocument } from '../schemas/payment.schema';
 export interface FulfilmentHandler {
   onPaid(referenceId: string, payment: PaymentDocument): Promise<void>;
   onFailed?(referenceId: string, reason?: string): Promise<void>;
+  /** A refunded payment reverses whatever `onPaid` granted. */
+  onRefunded?(referenceId: string, payment: PaymentDocument): Promise<void>;
 }
 
 /**
@@ -52,6 +54,28 @@ export class FulfilmentRegistry {
     } catch (error) {
       this.logger.error(
         `Fulfilment failed for payment ${payment._id} (${payment.area}/${payment.referenceId}): ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Runs the refund handler for a payment, if the area registered one.
+   *
+   * Failures are logged, never thrown: the refund has already been issued at
+   * the provider, so throwing here would not undo it and would only mask the
+   * completed money movement behind an error.
+   */
+  async refund(payment: PaymentDocument): Promise<void> {
+    const handler = this.handlers.get(payment.area);
+    if (!handler?.onRefunded) return;
+
+    try {
+      await handler.onRefunded(payment.referenceId.toString(), payment);
+    } catch (error) {
+      this.logger.error(
+        `Refund fulfilment failed for payment ${payment._id} (${payment.area}/${payment.referenceId}): ${
           error instanceof Error ? error.message : error
         }`,
       );
