@@ -96,4 +96,10 @@ export class PseProvider implements PaymentProvider {
   async fetchPaymentState(_providerRef: string): Promise<State> {
     this.notImplemented();
   }
+
+  async refund(_providerRef: string, _amountMinor?: number): Promise<void> {
+    throw new Error(
+      'PSE refunds are handled in the PSP dashboard, not via API',
+    );
+  }
 }
