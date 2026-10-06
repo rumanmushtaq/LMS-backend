@@ -267,6 +267,47 @@ export class ClassesService {
       .exec();
   }
 
+  /**
+   * Admin list of every class, optionally filtered by status.
+   *
+   * Returns plain, normalized objects rather than raw Mongoose documents: the
+   * admin table reads fields like `students.length` and `title`, and a legacy
+   * record missing an array or a string would otherwise surface as
+   * `undefined` and crash the page. Every field is defaulted here so the client
+   * always receives a predictable shape.
+   */
+  async findAllForAdmin(status?: string): Promise<any[]> {
+    const query: Record<string, any> = {};
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    const rows = await this.classSessionModel
+      .find(query)
+      .populate('tutorId', 'firstName lastName email')
+      .populate('students', 'firstName lastName email')
+      .populate('courseId', 'title')
+      .sort({ startTime: -1 })
+      .lean()
+      .exec();
+
+    return (rows as any[]).map((c) => ({
+      _id: String(c._id),
+      title: typeof c.title === 'string' ? c.title : '',
+      description: typeof c.description === 'string' ? c.description : '',
+      tutorId: c.tutorId ?? null,
+      students: Array.isArray(c.students) ? c.students : [],
+      status: c.status ?? ClassStatus.PENDING_APPROVAL,
+      startTime: c.startTime ?? null,
+      endTime: c.endTime ?? null,
+      courseId: c.courseId ?? null,
+      cancelReason: c.cancelReason ?? null,
+      cancelledByRole: c.cancelledByRole ?? null,
+      createdAt: c.createdAt ?? null,
+      updatedAt: c.updatedAt ?? null,
+    }));
+  }
+
   async findOne(id: string): Promise<ClassSession> {
     const classSession = await this.classSessionModel
       .findById(id)
