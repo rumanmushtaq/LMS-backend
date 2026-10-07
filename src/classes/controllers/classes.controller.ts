@@ -192,7 +192,9 @@ export class ClassesController {
   @Roles(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get all classes (Admin only)' })
   findAllAdmin(@Query() query: any) {
-    return this.classesService.findAll(query);
+    // Normalized, lean payload so the admin table always gets a predictable
+    // shape (students as an array, strings for title/description, etc.).
+    return this.classesService.findAllForAdmin(query?.status);
   }
 
   @Get(':id')
