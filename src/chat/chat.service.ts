@@ -84,7 +84,7 @@ export class ChatService {
       lastMessages.map((r) => [r._id.toString(), r.lastMessage]),
     );
 
-    return conversations
+    const enriched = conversations
       .map((conv) => ({
         ...conv,
         lastMessage: lastByConversation.get(conv._id.toString()) ?? null,
@@ -93,8 +93,27 @@ export class ChatService {
         const aDate = a.lastMessage?.createdAt || a.createdAt;
         const bDate = b.lastMessage?.createdAt || b.createdAt;
         return new Date(bDate).getTime() - new Date(aDate).getTime();
-      })
-      .slice(skip, skip + limit);
+      });
+
+    // Collapse multiple conversations between the SAME set of participants into
+    // one row. The same tutor+student pair otherwise appears many times — once
+    // per class Q&A room, plus any legacy duplicates — so the list showed the
+    // same people over and over. Sorted newest-first above, so the first
+    // occurrence we keep is the most recently active thread for that pair.
+    const seen = new Set<string>();
+    const deduped: any[] = [];
+    for (const conv of enriched) {
+      const key = (conv.participants || [])
+        .map((p: any) => (p?._id ?? p)?.toString())
+        .filter(Boolean)
+        .sort()
+        .join('|');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      deduped.push(conv);
+    }
+
+    return deduped.slice(skip, skip + limit);
   }
 
   async assertParticipant(
