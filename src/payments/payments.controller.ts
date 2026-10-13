@@ -24,6 +24,7 @@ import { UserRole } from '../users/schemas/user.schema';
 import { PaymentsService } from './services/payments.service';
 import { PlatformSettingsService } from './services/platform-settings.service';
 import { AdminTransactionsService } from './services/admin-transactions.service';
+import { TutorEarningsService } from './services/tutor-earnings.service';
 import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
 import {
   QueryTransactionsDto,
@@ -42,6 +43,7 @@ export class PaymentsController {
     private readonly payments: PaymentsService,
     private readonly settings: PlatformSettingsService,
     private readonly transactions: AdminTransactionsService,
+    private readonly tutorEarnings: TutorEarningsService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -172,6 +174,27 @@ export class PaymentsController {
   @ApiOperation({ summary: '[Admin] Re-poll the provider and sync status' })
   reconcileTransaction(@Param('id') id: string) {
     return this.transactions.reconcile(id);
+  }
+
+  // ─── Admin: per-tutor earnings ───────────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Get('tutors/:id/earnings')
+  @ApiOperation({
+    summary: '[Admin] A tutor’s earnings (by area) and their transactions',
+  })
+  tutorEarningsSummary(
+    @Param('id') id: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.tutorEarnings.summary(
+      id,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
   }
 
   // ─── Seller balance ─────────────────────────────────────────────────────
