@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -92,42 +87,55 @@ export class TutorMaterialsService {
     }
   }
 
-  // MVP Mock Purchase logic
-  async purchaseMaterial(studentId: string, materialId: string): Promise<any> {
-    const material = await this.materialModel.findById(materialId);
-    if (!material) throw new NotFoundException('Material not found');
-    if (!material.isActive)
-      throw new BadRequestException('Material is not available for purchase');
-
-    // Check if already purchased
-    const existing = await this.purchaseModel.findOne({
+  /** Has this student already paid for this material? Gates re-purchase and download. */
+  async isPurchasedBy(studentId: string, materialId: string): Promise<boolean> {
+    const existing = await this.purchaseModel.exists({
       studentId: new Types.ObjectId(studentId),
       materialId: new Types.ObjectId(materialId),
       status: 'paid',
     });
+    return Boolean(existing);
+  }
 
-    if (existing) {
-      return { message: 'Already purchased', downloadUrl: material.fileUrl };
-    }
+  /**
+   * Grants a student access to a material after their payment settled.
+   *
+   * Called only from MaterialFulfilment. Idempotent: an upsert on
+   * (studentId, materialId) means a redelivered webhook re-grants the same row
+   * instead of creating a duplicate, and re-buying after a refund flips the
+   * same row back to paid.
+   */
+  async grantPurchase(input: {
+    studentId: string;
+    materialId: string;
+    amountPaidMinor: number;
+    paymentId: string;
+  }): Promise<void> {
+    await this.purchaseModel.updateOne(
+      {
+        studentId: new Types.ObjectId(input.studentId),
+        materialId: new Types.ObjectId(input.materialId),
+      },
+      {
+        $set: {
+          amountPaid: input.amountPaidMinor,
+          paymentId: input.paymentId,
+          status: 'paid',
+        },
+      },
+      { upsert: true },
+    );
+  }
 
-    // Create a mock purchase record
-    const mockIntentId =
-      'pi_mock_' + Math.random().toString(36).substring(2, 15);
-    const purchase = new this.purchaseModel({
-      studentId: new Types.ObjectId(studentId),
-      materialId: new Types.ObjectId(materialId),
-      amountPaid: material.price,
-      stripePaymentIntentId: mockIntentId,
-      status: 'paid', // Mocking instant payment success
-    });
-
-    await purchase.save();
-
-    return {
-      message: 'Purchase successful',
-      purchaseId: purchase._id,
-      downloadUrl: material.fileUrl,
-    };
+  /** Revokes a student's access when their payment is refunded. */
+  async revokePurchase(studentId: string, materialId: string): Promise<void> {
+    await this.purchaseModel.updateOne(
+      {
+        studentId: new Types.ObjectId(studentId),
+        materialId: new Types.ObjectId(materialId),
+      },
+      { $set: { status: 'refunded' } },
+    );
   }
 
   // Retrieve purchased materials for a student

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TutorMaterialsController } from './tutor-materials.controller';
 import { TutorMaterialsService } from './tutor-materials.service';
+import { MaterialCheckoutService } from './services/material-checkout.service';
 import { UploadService } from '../admin/services/upload.service';
 
 describe('TutorMaterialsController', () => {
@@ -11,6 +12,7 @@ describe('TutorMaterialsController', () => {
       controllers: [TutorMaterialsController],
       providers: [
         { provide: TutorMaterialsService, useValue: {} },
+        { provide: MaterialCheckoutService, useValue: {} },
         { provide: UploadService, useValue: {} },
       ],
     }).compile();

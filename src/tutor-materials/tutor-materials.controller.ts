@@ -23,8 +23,10 @@ import {
   ApiBody,
 } from '@nestjs/swagger';
 import { TutorMaterialsService } from './tutor-materials.service';
+import { MaterialCheckoutService } from './services/material-checkout.service';
 import { CreateTutorMaterialDto } from './dto/create-tutor-material.dto';
 import { UpdateTutorMaterialDto } from './dto/update-tutor-material.dto';
+import { PurchaseMaterialDto } from './dto/purchase-material.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -38,6 +40,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 export class TutorMaterialsController {
   constructor(
     private readonly tutorMaterialsService: TutorMaterialsService,
+    private readonly materialCheckout: MaterialCheckoutService,
     private readonly uploadService: UploadService,
   ) {}
 
@@ -133,15 +136,25 @@ export class TutorMaterialsController {
     return this.tutorMaterialsService.remove(id, req.user._id.toString());
   }
 
+  // The only route to access: there is no "grant me" endpoint. Ownership is
+  // granted by settled payment, in MaterialFulfilment. This starts the payment
+  // and returns the provider instruction the client completes; the material is
+  // NOT owned until the provider webhook confirms it.
   @Post(':id/purchase')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.STUDENT)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Purchase a material (Student only) - Mock flow' })
-  purchaseMaterial(@Req() req: any, @Param('id') materialId: string) {
-    return this.tutorMaterialsService.purchaseMaterial(
-      req.user._id.toString(),
+  @ApiOperation({ summary: 'Pay for a material (Student only)' })
+  purchaseMaterial(
+    @Req() req: any,
+    @Param('id') materialId: string,
+    @Body() dto: PurchaseMaterialDto,
+  ) {
+    return this.materialCheckout.startPurchase(
       materialId,
+      req.user._id.toString(),
+      dto.paymentMethod,
+      req.user.email,
     );
   }
 
