@@ -25,6 +25,8 @@ import { PaymentsService } from './services/payments.service';
 import { PlatformSettingsService } from './services/platform-settings.service';
 import { AdminTransactionsService } from './services/admin-transactions.service';
 import { TutorEarningsService } from './services/tutor-earnings.service';
+import { PayoutService } from './services/payout.service';
+import { CreatePayoutDto } from './dto/create-payout.dto';
 import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
 import {
   QueryTransactionsDto,
@@ -44,6 +46,7 @@ export class PaymentsController {
     private readonly settings: PlatformSettingsService,
     private readonly transactions: AdminTransactionsService,
     private readonly tutorEarnings: TutorEarningsService,
+    private readonly payouts: PayoutService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -195,6 +198,31 @@ export class PaymentsController {
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
     );
+  }
+
+  // ─── Admin: payouts ───────────────────────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Post('tutors/:id/payouts')
+  @ApiOperation({ summary: '[Admin] Record a payout to a tutor' })
+  recordPayout(
+    @Param('id') id: string,
+    @Body() dto: CreatePayoutDto,
+    @Req() req: Request & { user: any },
+  ) {
+    const adminId = req?.user?._id || req?.user?.userId;
+    return this.payouts.record(id, dto, adminId ? String(adminId) : undefined);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Get('tutors/:id/payouts')
+  @ApiOperation({ summary: '[Admin] A tutor’s payout history' })
+  listPayouts(@Param('id') id: string) {
+    return this.payouts.list(id);
   }
 
   // ─── Seller balance ─────────────────────────────────────────────────────

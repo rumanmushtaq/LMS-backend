@@ -21,6 +21,7 @@ import {
 } from '../tutor-materials/schemas/tutor-material.schema';
 import { ReferenceResolverService } from './services/reference-resolver.service';
 import { TutorEarningsService } from './services/tutor-earnings.service';
+import { PayoutService } from './services/payout.service';
 import { PaymentsService } from './services/payments.service';
 import { PlatformSettingsService } from './services/platform-settings.service';
 import { FulfilmentRegistry } from './services/fulfilment.registry';
@@ -60,6 +61,7 @@ import { PaymentsController } from './payments.controller';
     AdminTransactionsService,
     ReferenceResolverService,
     TutorEarningsService,
+    PayoutService,
   ],
   exports: [
     PaymentsService,
