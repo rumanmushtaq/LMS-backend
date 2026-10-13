@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Payment, PaymentSchema } from './schemas/payment.schema';
+import { Payout, PayoutSchema } from './schemas/payout.schema';
 import {
   PlatformSettings,
   PlatformSettingsSchema,
@@ -24,6 +25,7 @@ import { PaymentsController } from './payments.controller';
   imports: [
     MongooseModule.forFeature([
       { name: Payment.name, schema: PaymentSchema },
+      { name: Payout.name, schema: PayoutSchema },
       { name: PlatformSettings.name, schema: PlatformSettingsSchema },
     ]),
   ],

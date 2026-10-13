@@ -115,6 +115,13 @@ export class Payment {
   @ApiProperty({ description: 'Raw provider payload, for reconciliation' })
   @Prop({ type: Object, default: {} })
   providerMetadata: Record<string, any>;
+
+  @ApiProperty({
+    description: 'The Payout that settled this row, once paid out',
+    required: false,
+  })
+  @Prop({ type: Types.ObjectId, ref: 'Payout', default: null })
+  payoutId: Types.ObjectId | null;
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
