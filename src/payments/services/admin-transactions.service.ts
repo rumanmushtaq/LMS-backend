@@ -14,6 +14,7 @@ import {
 import { PaymentProviderRegistry } from '../providers/provider.registry';
 import { PaymentsService } from './payments.service';
 import { FulfilmentRegistry } from './fulfilment.registry';
+import { ReferenceResolverService } from './reference-resolver.service';
 import {
   QueryTransactionsDto,
   RefundTransactionDto,
@@ -35,6 +36,7 @@ export class AdminTransactionsService {
     private readonly registry: PaymentProviderRegistry,
     private readonly payments: PaymentsService,
     private readonly fulfilment: FulfilmentRegistry,
+    private readonly resolver: ReferenceResolverService,
   ) {}
 
   private buildFilter(query: QueryTransactionsDto): FilterQuery<PaymentDocument> {
@@ -109,7 +111,7 @@ export class AdminTransactionsService {
     return { byStatus, totalCount, totalGrossMinor };
   }
 
-  async getOne(id: string) {
+  async getOne(id: string): Promise<Record<string, any>> {
     if (!Types.ObjectId.isValid(id)) {
       throw new NotFoundException('Transaction not found');
     }
@@ -119,7 +121,11 @@ export class AdminTransactionsService {
       .populate('sellerId', 'firstName lastName email')
       .lean();
     if (!payment) throw new NotFoundException('Transaction not found');
-    return payment;
+    const reference = await this.resolver.resolve(
+      payment.area,
+      payment.referenceId,
+    );
+    return { ...payment, reference };
   }
 
   async refund(id: string, dto: RefundTransactionDto) {

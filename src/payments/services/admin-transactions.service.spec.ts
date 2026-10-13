@@ -20,11 +20,17 @@ describe('AdminTransactionsService.refund', () => {
     const registry: any = { get: jest.fn().mockReturnValue({ refund }) };
     const fulfilment: any = { refund: jest.fn().mockResolvedValue(undefined) };
     const payments: any = {};
+    const resolver: any = {
+      resolve: jest
+        .fn()
+        .mockResolvedValue({ kind: 'order', id: 'o1', label: 'x', available: true }),
+    };
     const svc = new AdminTransactionsService(
       model,
       registry,
       payments,
       fulfilment,
+      resolver,
     );
     return { svc, payment, refund, fulfilment };
   }
