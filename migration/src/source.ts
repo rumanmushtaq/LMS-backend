@@ -17,28 +17,35 @@ export interface Source {
 const WRITE = /\b(insert|update|delete|drop|alter|truncate|create|replace|grant|revoke)\b/i;
 
 export async function openSource(): Promise<Source> {
-  const privateKey = readPrivateKey();
+  // No SSH user configured → connect to MySQL directly (local test / CI).
+  // Production always has SSH_USER set, so it always tunnels.
+  const useTunnel = Boolean(env.ssh.user);
+  let server: { close: () => void } | null = null;
 
-  const [server] = await createTunnel(
-    { autoClose: false, reconnectOnError: false },
-    { port: env.ssh.localPort }, // local bind
-    {
-      host: env.ssh.host,
-      port: env.ssh.port,
-      username: env.ssh.user,
-      ...(privateKey ? { privateKey } : {}),
-      ...(env.ssh.password ? { password: env.ssh.password } : {}),
-    },
-    {
-      // Forward to MySQL as seen from the server.
-      dstAddr: env.mysql.host,
-      dstPort: env.mysql.port,
-    },
-  );
+  if (useTunnel) {
+    const privateKey = readPrivateKey();
+    const [srv] = await createTunnel(
+      { autoClose: false, reconnectOnError: false },
+      { port: env.ssh.localPort }, // local bind
+      {
+        host: env.ssh.host,
+        port: env.ssh.port,
+        username: env.ssh.user,
+        ...(privateKey ? { privateKey } : {}),
+        ...(env.ssh.password ? { password: env.ssh.password } : {}),
+      },
+      {
+        // Forward to MySQL as seen from the server.
+        dstAddr: env.mysql.host,
+        dstPort: env.mysql.port,
+      },
+    );
+    server = srv;
+  }
 
   const pool = mysql.createPool({
-    host: '127.0.0.1',
-    port: env.ssh.localPort,
+    host: useTunnel ? '127.0.0.1' : env.mysql.host,
+    port: useTunnel ? env.ssh.localPort : env.mysql.port,
     user: env.mysql.user,
     password: env.mysql.password,
     database: env.mysql.db,
@@ -58,7 +65,7 @@ export async function openSource(): Promise<Source> {
     },
     async close() {
       await pool.end();
-      server.close();
+      if (server) server.close();
     },
   };
 }

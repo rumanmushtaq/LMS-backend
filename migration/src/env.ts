@@ -24,9 +24,11 @@ export const env = {
     password: opt('MYSQL_PASSWORD'),
   },
   ssh: {
-    host: req('SSH_HOST'),
+    // Optional: when SSH_USER is empty, the source connects to MySQL directly
+    // (local test / CI). Production sets these and tunnels.
+    host: opt('SSH_HOST'),
     port: Number(opt('SSH_PORT', '22')),
-    user: req('SSH_USER'),
+    user: opt('SSH_USER'),
     privateKeyPath: opt('SSH_PRIVATE_KEY_PATH'),
     password: opt('SSH_PASSWORD'),
     localPort: Number(opt('SSH_LOCAL_PORT', '3307')),
