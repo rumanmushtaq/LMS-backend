@@ -22,21 +22,16 @@ async function verifyEntity(cfg: EntityConfig) {
   const tgt = await openTarget();
   try {
     const col = tgt.db.collection(cfg.targetCollection);
-    const where = cfg.sourceWhere ? `WHERE ${cfg.sourceWhere}` : '';
 
-    const [{ c: srcCount }] = await src.query<{ c: number }>(
-      `SELECT COUNT(*) AS c FROM \`${cfg.sourceTable}\` ${where}`,
-    );
+    const [{ c: srcCount }] = await src.query<{ c: number }>(cfg.countSql());
     const tgtCount = await col.countDocuments({ legacyId: { $exists: true } });
 
     log.info(
       `${cfg.key}: source=${srcCount}  migrated(legacyId)=${tgtCount}  ${srcCount === tgtCount ? 'MATCH' : 'MISMATCH'}`,
     );
 
-    // 5 random spot-checks.
-    const samples = await src.query<Record<string, any>>(
-      `SELECT * FROM \`${cfg.sourceTable}\` ${where} ORDER BY RAND() LIMIT 5`,
-    );
+    // 5 spot-checks.
+    const samples = await src.query<Record<string, any>>(cfg.sql(5));
     let ok = 0;
     for (const row of samples) {
       const expected = cfg.transform(row);

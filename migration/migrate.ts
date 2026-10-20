@@ -43,12 +43,8 @@ async function migrateEntity(cfg: EntityConfig, dryRun: boolean, limit?: number)
       await col.createIndex({ legacyId: 1 }, { unique: true, sparse: true });
     }
 
-    const where = cfg.sourceWhere ? `WHERE ${cfg.sourceWhere}` : '';
-    const lim = limit && limit > 0 ? `LIMIT ${limit}` : '';
-    const rows = await src.query<Record<string, any>>(
-      `SELECT * FROM \`${cfg.sourceTable}\` ${where} ${lim}`,
-    );
-    log.info(`${cfg.key}: read ${rows.length} source rows from \`${cfg.sourceTable}\``);
+    const rows = await src.query<Record<string, any>>(cfg.sql(limit));
+    log.info(`${cfg.key}: read ${rows.length} source rows`);
 
     const docs: Record<string, any>[] = [];
     const bad: any[] = [];
@@ -65,7 +61,7 @@ async function migrateEntity(cfg: EntityConfig, dryRun: boolean, limit?: number)
         bad.push({ reason: e?.message || 'transform threw', row });
       }
     }
-    writeErrors(cfg.sourceTable, bad);
+    writeErrors(cfg.key, bad);
     log.info(`${cfg.key}: ${docs.length} valid, ${bad.length} invalid`);
 
     if (dryRun) {
@@ -84,9 +80,22 @@ async function migrateEntity(cfg: EntityConfig, dryRun: boolean, limit?: number)
           upsert: true,
         },
       }));
-      const res = await col.bulkWrite(ops, { ordered: false });
-      upserted += (res.upsertedCount || 0) + (res.modifiedCount || 0);
-      log.info(`${cfg.key}: batch ${i / BATCH + 1} → upserted ${res.upsertedCount}, modified ${res.modifiedCount}`);
+      try {
+        const res = await col.bulkWrite(ops, { ordered: false });
+        upserted += (res.upsertedCount || 0) + (res.modifiedCount || 0);
+        log.info(`${cfg.key}: batch ${i / BATCH + 1} → upserted ${res.upsertedCount}, modified ${res.modifiedCount}`);
+      } catch (e: any) {
+        // ordered:false → partial success; a duplicate email on an existing
+        // account is a skip, not a crash. Count what landed, log conflicts.
+        const r = e?.result ?? {};
+        const uc = r.upsertedCount ?? r.nUpserted ?? 0;
+        const mc = r.modifiedCount ?? r.nModified ?? 0;
+        upserted += uc + mc;
+        const writeErrs = e?.writeErrors ?? r.writeErrors ?? [];
+        log.warn(
+          `${cfg.key}: batch ${i / BATCH + 1} → upserted ${uc}, modified ${mc}, ${writeErrs.length} conflicts skipped (e.g. duplicate email)`,
+        );
+      }
     }
     log.info(`${cfg.key}: done — ${upserted} documents written to \`${cfg.targetCollection}\``);
     return { valid: docs.length, invalid: bad.length, upserted };

@@ -1,135 +1,111 @@
 /**
- * Field maps: old MySQL row → new MongoDB document.
+ * Field maps: old MySQL (Laravel `varona`) → new MongoDB documents.
  *
- * Source table names and the exact column names come from `inspect.ts`
- * (`migration/mapping.md`). The column pickers below accept several common
- * spellings so the transform keeps working whatever the old schema called
- * them; tighten them once the inspection confirms the real names.
+ * Scope: tutors → `users` (role='tutor') and shirts → `products`.
  *
- * Only two entities are in scope: tutors → `users` (role = 'tutor') and
- * shirts → `products`.
+ * Real source schema (confirmed by inspect):
+ *   users(id,name,email,password,role enum(admin,tutor,student),email_verified_at,...)
+ *   tutor_profiles(user_id, first_name, last_name, ...)
+ *   products(id,title,description,price,status enum(active,inactive),...)
+ *   product_images(product_id, image)      sizes(product_id, size)
+ *
+ * Images/sizes live in child tables, so each entity uses a JOIN with
+ * GROUP_CONCAT to pull them as one row.
  */
 
-// ─── CONFIRM AFTER INSPECT ───────────────────────────────────────────────────
-// Set these to the real source table names (and the tutor filter) once
-// inspect.ts has listed the tables.
-export const SOURCE = {
-  tutors: {
-    table: 'users', // e.g. 'users' or 'tutors'
-    // Extra WHERE applied when the tutor rows live in a shared users table.
-    // Leave '' if the table only holds tutors.
-    where: "role = 'tutor'",
-  },
-  shirts: {
-    table: 'products', // e.g. 'products' or 'shirts'
-    where: '',
-  },
-};
+const SEP = '||';
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-function pick(row: Record<string, any>, ...names: string[]): any {
-  for (const n of names) {
-    if (row[n] !== undefined && row[n] !== null) return row[n];
-  }
-  return undefined;
+function str(v: any): string {
+  return v == null ? '' : String(v).trim();
 }
-
+function toNumber(v: any): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 function toDate(v: any): Date | null {
   if (v == null) return null;
   const d = v instanceof Date ? v : new Date(v);
   return Number.isNaN(d.getTime()) ? null : d;
 }
-
-function toBool(v: any): boolean {
-  if (typeof v === 'boolean') return v;
-  if (typeof v === 'number') return v !== 0;
-  if (typeof v === 'string') return ['1', 'true', 'yes', 'y'].includes(v.toLowerCase());
-  return false;
-}
-
-function toNumber(v: any): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function str(v: any): string {
-  return v == null ? '' : String(v).trim();
-}
-
-/** Splits a flat column into an array: JSON array, or comma-separated. */
-function toArray(v: any): string[] {
-  if (Array.isArray(v)) return v.map(str).filter(Boolean);
+function splitList(v: any): string[] {
   if (v == null || v === '') return [];
-  const s = String(v).trim();
-  if (s.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(s);
-      if (Array.isArray(parsed)) return parsed.map(str).filter(Boolean);
-    } catch {
-      /* fall through to CSV */
-    }
-  }
-  return s.split(',').map((x) => x.trim()).filter(Boolean);
+  return String(v).split(SEP).map((x) => x.trim()).filter(Boolean);
 }
 
 export interface EntityConfig {
   key: 'tutors' | 'shirts';
-  sourceTable: string;
-  sourceWhere: string;
   targetCollection: string;
-  /** One source row → one target document (without _id). */
-  transform(row: Record<string, any>): Record<string, any>;
-  /** Fields a valid target doc must have (non-empty). */
   required: string[];
+  /** Full SELECT for the entity (optionally capped). */
+  sql(limit?: number): string;
+  /** COUNT of source rows this entity migrates. */
+  countSql(): string;
+  transform(row: Record<string, any>): Record<string, any>;
 }
 
-const now = () => new Date();
+const lim = (n?: number) => (n && n > 0 ? ` LIMIT ${n}` : '');
 
 export const ENTITIES: Record<'tutors' | 'shirts', EntityConfig> = {
   tutors: {
     key: 'tutors',
-    sourceTable: SOURCE.tutors.table,
-    sourceWhere: SOURCE.tutors.where,
     targetCollection: 'users',
     required: ['email', 'firstName', 'lastName', 'password'],
+    countSql: () => `SELECT COUNT(*) AS c FROM users WHERE role = 'tutor'`,
+    sql: (n) => `
+      SELECT u.id AS id, u.email, u.name, u.password,
+             u.email_verified_at, u.created_at, u.updated_at,
+             tp.first_name, tp.last_name
+      FROM users u
+      LEFT JOIN tutor_profiles tp ON tp.user_id = u.id
+      WHERE u.role = 'tutor'${lim(n)}`,
     transform(row) {
-      const created = toDate(pick(row, 'created_at', 'createdAt', 'created')) ?? now();
+      const nameParts = str(row.name).split(/\s+/).filter(Boolean);
+      const firstName = str(row.first_name) || nameParts[0] || '';
+      const lastName =
+        str(row.last_name) || nameParts.slice(1).join(' ') || firstName || '—';
+      const created = toDate(row.created_at) ?? new Date();
       return {
-        legacyId: pick(row, 'id', 'ID'),
-        email: str(pick(row, 'email', 'email_address')).toLowerCase(),
-        firstName: str(pick(row, 'first_name', 'firstName', 'fname', 'name')),
-        lastName: str(pick(row, 'last_name', 'lastName', 'lname', 'surname')),
+        legacyId: row.id,
+        email: str(row.email).toLowerCase(),
+        firstName,
+        lastName,
         // Keep the hash exactly as stored — never re-hash.
-        password: str(pick(row, 'password', 'password_hash', 'passwordHash')),
+        password: str(row.password),
         role: 'tutor',
-        status: str(pick(row, 'status')) || 'active',
-        emailVerified: toBool(pick(row, 'email_verified', 'emailVerified', 'is_verified')),
-        isDeleted: toBool(pick(row, 'is_deleted', 'isDeleted', 'deleted')),
+        status: 'active',
+        emailVerified: row.email_verified_at != null,
+        isDeleted: false,
         createdAt: created,
-        updatedAt: toDate(pick(row, 'updated_at', 'updatedAt')) ?? created,
+        updatedAt: toDate(row.updated_at) ?? created,
       };
     },
   },
+
   shirts: {
     key: 'shirts',
-    sourceTable: SOURCE.shirts.table,
-    sourceWhere: SOURCE.shirts.where,
     targetCollection: 'products',
     required: ['title', 'description'],
+    countSql: () => `SELECT COUNT(*) AS c FROM products`,
+    sql: (n) => `
+      SELECT p.id, p.title, p.description, p.price, p.status,
+             p.created_at, p.updated_at,
+             (SELECT GROUP_CONCAT(pi.image SEPARATOR '${SEP}')
+                FROM product_images pi WHERE pi.product_id = p.id) AS images,
+             (SELECT GROUP_CONCAT(s.size SEPARATOR '${SEP}')
+                FROM sizes s WHERE s.product_id = p.id) AS sizes
+      FROM products p${lim(n)}`,
     transform(row) {
-      const created = toDate(pick(row, 'created_at', 'createdAt', 'created')) ?? now();
+      const created = toDate(row.created_at) ?? new Date();
       return {
-        legacyId: pick(row, 'id', 'ID'),
-        title: str(pick(row, 'title', 'name', 'product_name')),
-        description: str(pick(row, 'description', 'desc', 'details')),
-        price: toNumber(pick(row, 'price', 'amount', 'cost')),
-        images: toArray(pick(row, 'images', 'image', 'image_url', 'photos')),
-        sizes: toArray(pick(row, 'sizes', 'size', 'available_sizes')),
-        isActive: pick(row, 'is_active', 'isActive', 'active', 'status') == null
-          ? true
-          : toBool(pick(row, 'is_active', 'isActive', 'active', 'status')),
+        legacyId: row.id,
+        title: str(row.title),
+        description: str(row.description),
+        price: toNumber(row.price),
+        images: splitList(row.images),
+        sizes: splitList(row.sizes),
+        isActive: str(row.status) !== 'inactive',
         createdAt: created,
-        updatedAt: toDate(pick(row, 'updated_at', 'updatedAt')) ?? created,
+        updatedAt: toDate(row.updated_at) ?? created,
       };
     },
   },
