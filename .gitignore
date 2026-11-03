@@ -60,3 +60,5 @@ migration/.env
 migration/backups/
 migration/errors/
 migration/mapping.md
+migration/media-map.json
+migration/media-run*.log
