@@ -15,9 +15,9 @@
  *   --id=<legacyId>        only this record (test one tutor/product)
  *
  * What moves where (records matched on `legacyId`):
- *   tutor_profiles.photo_path / users.avatar → users.kycData.avatar
+ *   tutor_profiles.photo_path / users.avatar → users.kycData.photoUrl (+ avatar)
  *   tutor_profiles.video_path                → users.kycData.introVideoUrl
- *   tutor_certificates.certificate_path      → users.kycDocuments
+ *   tutor_certificates + tutor_profiles.certifications → users.kycData.certifications
  *   product_images.image                     → products.images
  *
  * Idempotent: every uploaded file is recorded in migration/media-map.json
@@ -146,6 +146,37 @@ const groupBy = (rows: Row[], key: string) => {
   return out;
 };
 
+/**
+ * The old site kept certificates in two places: tutor_certificates rows and
+ * the tutor_profiles.certifications column (one path, or a JSON array of
+ * paths). Merges both, deduped on the normalised path.
+ */
+// The seeded demo tutors all point at this file; it is an unrelated developer
+// write-up, not a certificate, so it is never shown as one.
+const PLACEHOLDER_CERT = 'frontend/crt.pdf';
+
+function certificatePaths(rows: string[], column: string | null): string[] {
+  const fromColumn: string[] = [];
+  const raw = str(column);
+  if (raw) {
+    try {
+      const parsed = raw.startsWith('[') ? JSON.parse(raw) : [raw];
+      if (Array.isArray(parsed)) fromColumn.push(...parsed.map(String));
+    } catch {
+      fromColumn.push(raw);
+    }
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of [...rows, ...fromColumn].map((x) => str(x)).filter(Boolean)) {
+    const key = p.replace(/^\/+/, '');
+    if (key === PLACEHOLDER_CERT || seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
 async function migrateTutors(
   tables: ReturnType<typeof readDump>,
   media: Media,
@@ -162,7 +193,7 @@ async function migrateTutors(
 
     const docs = await users
       .find({ legacyId: id ?? { $exists: true }, role: 'tutor' })
-      .project({ legacyId: 1, kycData: 1, kycDocuments: 1 })
+      .project({ legacyId: 1, kycData: 1 })
       .sort({ legacyId: 1 })
       .toArray();
     const todo = limit ? docs.slice(0, limit) : docs;
@@ -174,13 +205,20 @@ async function migrateTutors(
       const profile = profileByUser.get(id);
       const photo = str(profile?.photo_path) || str(userById.get(id)?.avatar);
       const video = str(profile?.video_path);
-      const certs = (certsByProfile.get(str(profile?.id)) ?? []).map((c) => str(c.certificate_path)).filter(Boolean);
+      const certs = certificatePaths(
+        (certsByProfile.get(str(profile?.id)) ?? []).map((c) => str(c.certificate_path)),
+        profile?.certifications ?? null,
+      );
 
       const kyc = doc.kycData && typeof doc.kycData === 'object' ? doc.kycData : null;
       const set: Record<string, any> = {};
-      if (photo && !kyc?.avatar) {
+      // The admin and onboarding read photoUrl; the dashboard also reads avatar.
+      if (photo && !kyc?.photoUrl) {
         const url = await media.url('avatar', doc.legacyId, photo);
-        if (url) set.avatar = url;
+        if (url) {
+          set.photoUrl = url;
+          if (!kyc?.avatar) set.avatar = url;
+        }
       }
       if (video && !kyc?.introVideoUrl) {
         const url = await media.url('video', doc.legacyId, video);
@@ -191,20 +229,19 @@ async function migrateTutors(
         const url = await media.url('certificate', doc.legacyId, c);
         if (url) certUrls.push(url);
       }
-      const existingDocs: string[] = Array.isArray(doc.kycDocuments) ? doc.kycDocuments : [];
-      const newDocs = certUrls.filter((u) => !existingDocs.includes(u));
+      const existingCerts: string[] = Array.isArray(kyc?.certifications) ? kyc.certifications : [];
+      const newCerts = certUrls.filter((u) => !existingCerts.includes(u));
+      if (newCerts.length) set.certifications = [...existingCerts, ...newCerts];
 
-      if (!Object.keys(set).length && !newDocs.length) continue;
+      if (!Object.keys(set).length) continue;
       changed++;
 
       // kycData can be null on migrated tutors; a dotted $set into null fails.
-      const update: Record<string, any> = {};
-      if (Object.keys(set).length) {
-        update.$set = kyc
+      const update = {
+        $set: kyc
           ? Object.fromEntries(Object.entries(set).map(([k, v]) => [`kycData.${k}`, v]))
-          : { kycData: set };
-      }
-      if (newDocs.length) update.$addToSet = { kycDocuments: { $each: newDocs } };
+          : { kycData: set },
+      };
 
       if (dryRun) {
         if (changed <= 3) console.dir({ legacyId: doc.legacyId, update }, { depth: null });
