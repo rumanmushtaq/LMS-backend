@@ -1,8 +1,8 @@
 /**
  * Money handling for the payments module.
  *
- * Everything here is in **minor units as integers** (cents for USD, pesos for
- * COP). Floats are never used for money: `0.1 + 0.2 !== 0.3`, and a commission
+ * Everything here is in **minor units as integers** (cents for USD, centavos
+ * for COP). Floats are never used for money: `0.1 + 0.2 !== 0.3`, and a commission
  * split computed in floats will not add back up to the amount the customer was
  * charged. The existing shop code stores prices as float dollars and multiplies
  * by 100 at checkout — new code should read `amountMinor` instead.
@@ -11,11 +11,13 @@
 /**
  * Currencies with no minor unit, where "1" means one whole unit.
  *
- * Colombian pesos are quoted and charged as whole pesos in practice, and the
- * PSE rails work in whole pesos. Treating COP as 1/100 would charge 100x.
+ * COP is deliberately NOT here. Although pesos are quoted whole, both
+ * providers take COP in centavos: Stripe lists COP as a two-decimal currency
+ * (https://docs.stripe.com/currencies), and Wompi's `amount_in_cents` is
+ * centavos (10000 = $100 COP). Treating COP as zero-decimal sent 1/100 of the
+ * price — a 50,000 COP item would have been charged 500 COP.
  */
 const ZERO_DECIMAL_CURRENCIES = new Set([
-  'COP',
   'CLP',
   'JPY',
   'KRW',

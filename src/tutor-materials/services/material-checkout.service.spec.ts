@@ -134,11 +134,11 @@ describe('MaterialCheckoutService amount', () => {
     );
   });
 
-  it('charges 50 pesos for a material stored as 5000 in a zero-decimal currency', async () => {
+  it('charges 50 pesos (5000 centavos) for a material stored as 5000 in COP', async () => {
     const { svc, payments } = make(5000, 'COP');
     await svc.startPurchase('m1', 's1', 'pse');
     expect(payments.startPayment).toHaveBeenCalledWith(
-      expect.objectContaining({ amountMinor: 50 }),
+      expect.objectContaining({ amountMinor: 5000 }),
     );
   });
 });

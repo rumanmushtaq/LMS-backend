@@ -243,8 +243,11 @@ export class ShopService implements OnModuleInit, FulfilmentHandler {
 
   // ─── Get My Orders ────────────────────────────────────────────────────────────
   async getMyOrders(userId: string): Promise<any[]> {
+    // userId is declared with mongoose's Types.ObjectId (the BSON class), which
+    // makes the path Mixed: a string is not cast, so it matched no order and
+    // every buyer's history came back empty. Query with a real ObjectId.
     return this.shopOrderModel
-      .find({ userId })
+      .find({ userId: new Types.ObjectId(userId) })
       .populate('items.productId', 'title images price')
       .sort({ createdAt: -1 })
       .lean();

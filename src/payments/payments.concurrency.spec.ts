@@ -340,6 +340,10 @@ describe('Checkout under a double-clicked "Pay"', () => {
     expect(await paymentModel.countDocuments()).toBe(1);
     const order = await orderModel.findOne().lean();
     expect(order!.paymentId).toBe(a.paymentId);
+
+    // The buyer's order history finds it (it used to come back empty).
+    const history = await shop.getMyOrders(BUYER.toString());
+    expect(history.map((o: any) => String(o._id))).toEqual([a.orderId]);
   });
 });
 
