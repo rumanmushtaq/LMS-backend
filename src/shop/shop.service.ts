@@ -110,6 +110,7 @@ export class ShopService implements OnModuleInit, FulfilmentHandler {
     userId: string,
     dto: CheckoutDto,
     buyerEmail?: string,
+    idempotencyKey?: string,
   ): Promise<{
     orderId: string;
     paymentId: string;
@@ -147,13 +148,37 @@ export class ShopService implements OnModuleInit, FulfilmentHandler {
       throw new BadRequestException('Order total must be greater than zero');
     }
 
-    const order = await this.shopOrderModel.create({
-      userId: new Types.ObjectId(userId),
-      items: resolvedItems,
-      totalAmount: toMajorUnits(totalMinor, currency),
-      status: 'pending',
-      shippingAddress: dto.shipping,
-    });
+    // One order per checkout attempt: a repeated request with the same key
+    // (a double-clicked "Pay") continues the first order instead of opening a
+    // second one, and its payment is then answered the same way.
+    const userOid = new Types.ObjectId(userId);
+    const key = idempotencyKey ?? null;
+    let order = key
+      ? await this.shopOrderModel.findOne({ userId: userOid, idempotencyKey: key })
+      : null;
+    if (!order) {
+      try {
+        order = await this.shopOrderModel.create({
+          userId: userOid,
+          items: resolvedItems,
+          totalAmount: toMajorUnits(totalMinor, currency),
+          status: 'pending',
+          shippingAddress: dto.shipping,
+          idempotencyKey: key,
+        });
+      } catch (error) {
+        // Raced another request with this key; the unique index kept one.
+        const existing =
+          key && (error as { code?: number })?.code === 11000
+            ? await this.shopOrderModel.findOne({
+                userId: userOid,
+                idempotencyKey: key,
+              })
+            : null;
+        if (!existing) throw error;
+        order = existing;
+      }
+    }
 
     const payment = await this.payments.startPayment({
       buyerId: userId,
@@ -166,11 +191,14 @@ export class ShopService implements OnModuleInit, FulfilmentHandler {
       description: `Order ${(order._id as Types.ObjectId).toString()}`,
       providerId: dto.paymentMethod,
       buyerEmail,
+      idempotencyKey: key ?? undefined,
     });
 
     // Link the order to its ledger row so support can trace a charge.
-    order.paymentId = payment.paymentId;
-    await order.save();
+    if (order.paymentId !== payment.paymentId) {
+      order.paymentId = payment.paymentId;
+      await order.save();
+    }
 
     return {
       orderId: (order._id as Types.ObjectId).toString(),

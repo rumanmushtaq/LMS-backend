@@ -13,7 +13,9 @@ import {
   UploadedFile,
   BadRequestException,
   PayloadTooLargeException,
+  Headers,
 } from '@nestjs/common';
+import { idempotencyKeyFrom } from '../payments/idempotency-key';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -149,12 +151,14 @@ export class TutorMaterialsController {
     @Req() req: any,
     @Param('id') materialId: string,
     @Body() dto: PurchaseMaterialDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     return this.materialCheckout.startPurchase(
       materialId,
       req.user._id.toString(),
       dto.paymentMethod,
       req.user.email,
+      idempotencyKeyFrom(idempotencyKey),
     );
   }
 

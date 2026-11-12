@@ -51,6 +51,13 @@ describe('PaymentsService', () => {
         return created;
       }),
       findOne: jest.fn(),
+      // Mirrors the conditional write: applies only while the row the test
+      // handed to findOne is not already PAID.
+      findOneAndUpdate: jest.fn(async (filter: any, update: any) => {
+        const doc = await model.findOne(filter);
+        if (!doc || doc.status === filter.status?.$ne) return null;
+        return Object.assign(doc, update.$set);
+      }),
       exists: jest.fn(),
       aggregate: jest.fn().mockResolvedValue([]),
     };

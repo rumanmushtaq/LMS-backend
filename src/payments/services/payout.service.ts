@@ -77,25 +77,64 @@ export class PayoutService {
       throw new BadRequestException('This tutor has no owed payments to pay out');
     }
 
-    const amountMinor = payments.reduce((s, p) => s + (p.netMinor ?? 0), 0);
-    const currency = payments[0].currency;
-    const paymentIds = payments.map((p) => p._id);
-
-    const payout = await this.payoutModel.create({
-      tutorId: sellerId,
-      amountMinor,
-      currency,
-      method: input.method,
-      note: input.note ?? null,
-      reference: input.reference ?? null,
-      paymentIds,
-      createdBy: adminId ? new Types.ObjectId(adminId) : null,
-    });
-
+    // Claim the rows before writing the receipt. The filter only matches rows
+    // still OWED, so two requests racing (a double-clicked "Record payout")
+    // cannot both take the same payment: the second claims nothing and stops
+    // here instead of writing a second receipt for money already paid out.
+    const payoutId = new Types.ObjectId();
     await this.paymentModel.updateMany(
-      { _id: { $in: paymentIds } },
-      { $set: { payoutStatus: PayoutStatus.PAID_OUT, payoutId: payout._id } },
+      {
+        _id: { $in: payments.map((p) => p._id) },
+        sellerId,
+        status: PaymentStatus.PAID,
+        payoutStatus: PayoutStatus.OWED,
+      },
+      { $set: { payoutStatus: PayoutStatus.PAID_OUT, payoutId } },
     );
+    const claimed = await this.paymentModel.find({ payoutId }).lean();
+
+    const release = () =>
+      this.paymentModel.updateMany(
+        { payoutId },
+        { $set: { payoutStatus: PayoutStatus.OWED, payoutId: null } },
+      );
+
+    if (claimed.length === 0) {
+      throw new BadRequestException(
+        'These payments are already being paid out',
+      );
+    }
+    if (Array.isArray(input.paymentIds) && claimed.length !== payments.length) {
+      // Part of an explicit selection was taken by another payout meanwhile;
+      // paying out only some of what the admin picked would be a surprise.
+      await release();
+      throw new BadRequestException(
+        'Some selected payments were paid out by another request',
+      );
+    }
+
+    const amountMinor = claimed.reduce((s, p) => s + (p.netMinor ?? 0), 0);
+    const currency = claimed[0].currency;
+    const paymentIds = claimed.map((p) => p._id);
+
+    let payout: PayoutDocument;
+    try {
+      payout = await this.payoutModel.create({
+        _id: payoutId,
+        tutorId: sellerId,
+        amountMinor,
+        currency,
+        method: input.method,
+        note: input.note ?? null,
+        reference: input.reference ?? null,
+        paymentIds,
+        createdBy: adminId ? new Types.ObjectId(adminId) : null,
+      });
+    } catch (error) {
+      // No receipt means nothing was paid out: hand the rows back.
+      await release();
+      throw error;
+    }
 
     return payout;
   }

@@ -13,7 +13,9 @@ import {
   HttpCode,
   HttpStatus,
   Request,
+  Headers,
 } from '@nestjs/common';
+import { idempotencyKeyFrom } from '../payments/idempotency-key';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
@@ -155,8 +157,17 @@ export class ShopController {
       'Returns the payment instruction the client uses to complete payment. ' +
       'The order is NOT paid until the provider webhook confirms it.',
   })
-  async checkout(@CurrentUser() user: UserDocument, @Body() dto: CheckoutDto) {
-    return this.shopService.checkout(user._id.toString(), dto, user.email);
+  async checkout(
+    @CurrentUser() user: UserDocument,
+    @Body() dto: CheckoutDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.shopService.checkout(
+      user._id.toString(),
+      dto,
+      user.email,
+      idempotencyKeyFrom(idempotencyKey),
+    );
   }
 
   @UseGuards(JwtAuthGuard)

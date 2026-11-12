@@ -63,7 +63,13 @@ async function bootstrap() {
   app.enableCors({
     origin: nodeEnv === 'production' ? origins : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      // Sent by checkout requests so a retried "Pay" reuses one payment.
+      'Idempotency-Key',
+    ],
     credentials: true,
     maxAge: 86400, // 24 hours
   });

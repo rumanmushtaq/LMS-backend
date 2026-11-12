@@ -129,27 +129,114 @@ export class AdminTransactionsService {
   }
 
   async refund(id: string, dto: RefundTransactionDto) {
-    const payment = await this.paymentModel.findById(id);
-    if (!payment) throw new NotFoundException('Transaction not found');
-    if (payment.status !== PaymentStatus.PAID) {
-      throw new BadRequestException('Only a paid transaction can be refunded');
-    }
+    const payment = await this.refundable(id);
     if (!payment.providerRef) {
       throw new BadRequestException(
         'Transaction has no provider reference to refund',
       );
     }
-
     const provider = this.registry.get(payment.provider);
-    await provider.refund(payment.providerRef, dto.amountMinor);
+    if (!provider.refundsViaApi) {
+      throw new BadRequestException(
+        `${provider.displayName} refunds are made in the provider's dashboard. Refund it there, then mark this transaction refunded.`,
+      );
+    }
+    // The ledger has no partial-refund state: refunding part of a sale but
+    // marking all of it refunded would void the tutor's whole share.
+    if (dto.amountMinor !== undefined && dto.amountMinor !== payment.grossMinor) {
+      throw new BadRequestException(
+        'Only a full refund is supported for now',
+      );
+    }
 
-    payment.status = PaymentStatus.REFUNDED;
-    payment.payoutStatus = PayoutStatus.VOID;
-    payment.failureReason = dto.reason ?? 'Refunded by admin';
-    await payment.save();
+    const before = this.snapshot(payment);
+    const claimed = await this.claimRefund(
+      payment,
+      dto.reason ?? 'Refunded by admin',
+    );
 
-    await this.fulfilment.refund(payment);
-    return payment.toObject();
+    try {
+      await provider.refund(
+        payment.providerRef,
+        undefined,
+        `refund_${String(payment._id)}`,
+      );
+    } catch (error) {
+      // The provider refused, so no money went back: restore the row.
+      await this.paymentModel.updateOne(
+        { _id: payment._id, status: PaymentStatus.REFUNDED },
+        { $set: { status: PaymentStatus.PAID, ...before } },
+      );
+      throw error;
+    }
+
+    await this.fulfilment.refund(claimed);
+    return claimed.toObject();
+  }
+
+  /**
+   * Records a refund the admin already made in the provider's own dashboard
+   * (PSE/Wompi has no refund API). No money moves here: the ledger is marked
+   * refunded, the tutor's share voided and the buyer's access revoked.
+   */
+  async markRefunded(id: string, dto: RefundTransactionDto) {
+    const payment = await this.refundable(id);
+    const provider = this.registry.getRaw(payment.provider);
+    if (provider?.refundsViaApi) {
+      throw new BadRequestException(
+        `${provider.displayName} payments are refunded with Refund, which also returns the money`,
+      );
+    }
+
+    const claimed = await this.claimRefund(
+      payment,
+      dto.reason ?? `Refunded in the ${provider?.displayName ?? payment.provider} dashboard`,
+    );
+    await this.fulfilment.refund(claimed);
+    return claimed.toObject();
+  }
+
+  private async refundable(id: string): Promise<PaymentDocument> {
+    const payment = await this.paymentModel.findById(id);
+    if (!payment) throw new NotFoundException('Transaction not found');
+    if (payment.status !== PaymentStatus.PAID) {
+      throw new BadRequestException('Only a paid transaction can be refunded');
+    }
+    return payment;
+  }
+
+  /** What to restore if a refund is refused, read before the claim. */
+  private snapshot(payment: PaymentDocument) {
+    return {
+      payoutStatus: payment.payoutStatus,
+      failureReason: payment.failureReason ?? null,
+    };
+  }
+
+  /**
+   * Flips PAID → REFUNDED in one conditional write, before any money moves.
+   * Only a row still PAID matches, so of two refunds racing (a double-clicked
+   * "Refund") just one gets past here; the other is refused.
+   */
+  private async claimRefund(
+    payment: PaymentDocument,
+    reason: string,
+  ): Promise<PaymentDocument> {
+    const claimed = await this.paymentModel.findOneAndUpdate(
+      { _id: payment._id, status: PaymentStatus.PAID },
+      {
+        $set: {
+          status: PaymentStatus.REFUNDED,
+          payoutStatus: PayoutStatus.VOID,
+          failureReason: reason,
+        },
+      },
+      { new: true },
+    );
+    if (!claimed) {
+      throw new BadRequestException('This transaction is already refunded');
+    }
+    return claimed;
   }
 
   async reconcile(id: string) {

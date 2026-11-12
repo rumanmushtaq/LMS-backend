@@ -30,6 +30,7 @@ export class MaterialCheckoutService {
     studentId: string,
     providerId: string,
     buyerEmail?: string,
+    idempotencyKey?: string,
   ): Promise<StartPaymentResult> {
     const material = await this.materials.findOne(materialId); // 404s if missing
     if (!material.isActive) {
@@ -69,6 +70,7 @@ export class MaterialCheckoutService {
       description: `Material "${material.title}"`,
       providerId,
       buyerEmail,
+      idempotencyKey,
     });
   }
 }

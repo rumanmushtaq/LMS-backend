@@ -179,6 +179,21 @@ export class PaymentsController {
     return this.transactions.reconcile(id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  @ApiBearerAuth()
+  @Post('transactions/:id/mark-refunded')
+  @ApiOperation({
+    summary:
+      "[Admin] Record a refund made in the provider's dashboard (PSE/Wompi)",
+  })
+  markTransactionRefunded(
+    @Param('id') id: string,
+    @Body() dto: RefundTransactionDto,
+  ) {
+    return this.transactions.markRefunded(id, dto);
+  }
+
   // ─── Admin: per-tutor earnings ───────────────────────────────────────────
 
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -234,5 +249,22 @@ export class PaymentsController {
   async myBalance(@Req() req: Request & { user: any }) {
     const userId = req?.user?._id || req?.user?.userId;
     return this.payments.sellerBalance(String(userId));
+  }
+
+  // ─── Buyer: payment status ──────────────────────────────────────────────
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get(':id/status')
+  @ApiOperation({
+    summary:
+      'How the signed-in buyer\'s payment stands (for the payment-return page)',
+  })
+  async paymentStatus(
+    @Req() req: Request & { user: any },
+    @Param('id') id: string,
+  ) {
+    const userId = req?.user?._id || req?.user?.userId;
+    return this.payments.statusForBuyer(id, String(userId));
   }
 }

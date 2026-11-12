@@ -122,9 +122,29 @@ export class Payment {
   })
   @Prop({ type: Types.ObjectId, ref: 'Payout', default: null })
   payoutId: Types.ObjectId | null;
+
+  @ApiProperty({
+    description:
+      'Client-sent Idempotency-Key of the checkout request that created this row',
+    required: false,
+  })
+  @Prop({ type: String, default: null })
+  idempotencyKey: string | null;
 }
 
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
+
+// One payment per checkout attempt. The client sends the same key on every
+// retry of one attempt (a double-clicked "Pay"), so a second insert with it
+// fails here and the request is answered with the first payment instead.
+// Partial: rows created without a key are never compared.
+PaymentSchema.index(
+  { buyerId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+  },
+);
 
 // One payment per provider reference. This is what makes webhook handling
 // idempotent: providers retry deliveries, and without it a repeated
