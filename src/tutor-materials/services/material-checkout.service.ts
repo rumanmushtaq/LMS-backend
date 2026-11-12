@@ -42,7 +42,11 @@ export class MaterialCheckoutService {
     }
 
     const currency = await this.settings.currency();
-    const amountMinor = toMinorUnits(material.price ?? 0, currency);
+    // Tutors enter material prices in dollars and the app stores them in
+    // cents (InstructorMaterialsPage: Math.round(dollars * 100)). Charging
+    // that number as whole units billed 100x the price, so turn the stored
+    // cents back into whole units before converting for the currency.
+    const amountMinor = toMinorUnits((material.price ?? 0) / 100, currency);
     if (amountMinor <= 0) {
       // A free material has no checkout: the provider would reject a zero
       // charge. Free materials should be granted without payment.

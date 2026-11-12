@@ -19,7 +19,8 @@ function makeService(
     _id: MATERIAL_ID,
     tutorId: { _id: { toString: () => TUTOR } },
     title: 'Algebra notes',
-    price: 19.99,
+    // Stored in cents, as the tutor form saves it: $19.99.
+    price: 1999,
     isActive: true,
   };
   const materials: any = {
@@ -99,5 +100,45 @@ describe('buying a material', () => {
       service.startPurchase(MATERIAL_ID, STUDENT, 'stripe'),
     ).rejects.toThrow(BadRequestException);
     expect(payments.startPayment).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Material prices are stored in cents (the tutor form saves
+ * Math.round(dollars * 100)). These pin what is actually charged, after a
+ * bug that billed the stored cents as whole dollars — 100x the price.
+ */
+describe('MaterialCheckoutService amount', () => {
+  function make(price: number, currency: string) {
+    const materials: any = {
+      findOne: jest.fn().mockResolvedValue({
+        _id: 'm1',
+        title: 'Notes',
+        price,
+        isActive: true,
+        tutorId: { _id: 't1' },
+      }),
+      isPurchasedBy: jest.fn().mockResolvedValue(false),
+    };
+    const payments: any = { startPayment: jest.fn().mockResolvedValue({}) };
+    const settings: any = { currency: jest.fn().mockResolvedValue(currency) };
+    const svc = new MaterialCheckoutService(materials, payments, settings);
+    return { svc, payments };
+  }
+
+  it('charges $1.22 for a material stored as 122 cents', async () => {
+    const { svc, payments } = make(122, 'USD');
+    await svc.startPurchase('m1', 's1', 'stripe');
+    expect(payments.startPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ amountMinor: 122 }),
+    );
+  });
+
+  it('charges 50 pesos for a material stored as 5000 in a zero-decimal currency', async () => {
+    const { svc, payments } = make(5000, 'COP');
+    await svc.startPurchase('m1', 's1', 'pse');
+    expect(payments.startPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ amountMinor: 50 }),
+    );
   });
 });

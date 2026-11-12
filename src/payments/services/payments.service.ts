@@ -5,6 +5,7 @@ import {
   Optional,
   BadRequestException,
   ConflictException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -18,7 +19,10 @@ import {
 import { RevenueArea } from '../schemas/platform-settings.schema';
 import { PlatformSettingsService } from './platform-settings.service';
 import { PaymentProviderRegistry } from '../providers/provider.registry';
-import { PaymentInstruction } from '../providers/payment-provider.interface';
+import {
+  CreatePaymentResult,
+  PaymentInstruction,
+} from '../providers/payment-provider.interface';
 import { splitCommission } from '../money';
 import { FulfilmentRegistry } from './fulfilment.registry';
 
@@ -27,6 +31,24 @@ const REPLAY_WAIT_MS = 5000;
 const REPLAY_POLL_MS = 250;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** What a buyer sees when the provider would not start their payment. */
+const PROVIDER_START_FAILED =
+  'The payment provider could not start this payment. Please try again in a moment.';
+
+/**
+ * Why a payment failed, in words safe to show the buyer. A decline from the
+ * provider ("card declined") helps them; an error from starting the payment
+ * is about our setup and can name internal configuration, so stays generic.
+ */
+const buyerFacingReason = (payment: {
+  providerRef?: string | null;
+  failureReason?: string | null;
+  status: string;
+}) =>
+  payment.providerRef
+    ? (payment.failureReason ?? payment.status)
+    : PROVIDER_START_FAILED;
 
 /** MongoDB's duplicate-key error, raised by a unique index. */
 const isDuplicateKeyError = (error: unknown) =>
@@ -200,7 +222,9 @@ export class PaymentsService {
       this.logger.error(
         `Provider ${provider.id} failed to create payment ${payment._id}: ${payment.failureReason}`,
       );
-      throw error;
+      // The raw provider error (kept on the row for admins) can name our
+      // configuration; the buyer gets a plain, retryable message instead.
+      throw new BadGatewayException(PROVIDER_START_FAILED);
     }
   }
 
@@ -245,19 +269,29 @@ export class PaymentsService {
     }
     if (current.status !== PaymentStatus.PROCESSING) {
       throw new BadRequestException(
-        `This checkout attempt did not go through (${current.failureReason ?? current.status}). Please start a new one.`,
+        `This checkout attempt did not go through (${buyerFacingReason(current)}). Please start a new one.`,
       );
     }
 
     const provider = this.registry.get(current.provider);
-    const created = await provider.createPayment({
-      amountMinor: current.grossMinor,
-      currency: current.currency,
-      paymentId: current._id.toString(),
-      description: input.description,
-      buyerEmail: input.buyerEmail,
-      returnUrl: this.returnUrlFor(current._id.toString(), input.returnUrl),
-    });
+    let created: CreatePaymentResult;
+    try {
+      created = await provider.createPayment({
+        amountMinor: current.grossMinor,
+        currency: current.currency,
+        paymentId: current._id.toString(),
+        description: input.description,
+        buyerEmail: input.buyerEmail,
+        returnUrl: this.returnUrlFor(current._id.toString(), input.returnUrl),
+      });
+    } catch (error) {
+      this.logger.error(
+        `Provider ${provider.id} failed to resume payment ${current._id}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+      throw new BadGatewayException(PROVIDER_START_FAILED);
+    }
 
     return {
       paymentId: current._id.toString(),
@@ -447,7 +481,9 @@ export class PaymentsService {
       grossMinor: payment.grossMinor,
       currency: payment.currency,
       failureReason:
-        payment.status === PaymentStatus.FAILED ? payment.failureReason : null,
+        payment.status === PaymentStatus.FAILED
+          ? buyerFacingReason(payment)
+          : null,
     };
   }
 

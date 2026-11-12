@@ -142,8 +142,10 @@ describe('PaymentsService', () => {
     it('marks the row failed when the provider rejects it', async () => {
       provider.createPayment.mockRejectedValue(new Error('card network down'));
 
+      // The buyer gets a plain, retryable message; the raw error stays on
+      // the row for admins.
       await expect(service.startPayment(startInput)).rejects.toThrow(
-        'card network down',
+        'could not start this payment',
       );
       expect(created.status).toBe(PaymentStatus.FAILED);
       expect(created.failureReason).toContain('card network down');
