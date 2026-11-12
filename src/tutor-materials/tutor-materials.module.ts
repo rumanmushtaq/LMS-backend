@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { TutorMaterialsService } from './tutor-materials.service';
+import { MaterialCheckoutService } from './services/material-checkout.service';
+import { MaterialFulfilment } from './services/material.fulfilment';
 import { TutorMaterialsController } from './tutor-materials.controller';
 import {
   TutorMaterial,
@@ -11,6 +13,7 @@ import {
   MaterialPurchaseSchema,
 } from './schemas/material-purchase.schema';
 import { AdminModule } from '../admin/admin.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -19,8 +22,15 @@ import { AdminModule } from '../admin/admin.module';
       { name: MaterialPurchase.name, schema: MaterialPurchaseSchema },
     ]),
     AdminModule,
+    // Materials are sold through the payments module; the dependency runs only
+    // this way, and fulfilment comes back via FulfilmentRegistry.
+    PaymentsModule,
   ],
-  providers: [TutorMaterialsService],
+  providers: [
+    TutorMaterialsService,
+    MaterialCheckoutService,
+    MaterialFulfilment,
+  ],
   controllers: [TutorMaterialsController],
   exports: [TutorMaterialsService],
 })

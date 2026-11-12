@@ -66,6 +66,12 @@ export interface PaymentProvider {
   readonly supportedCurrencies: string[];
 
   /**
+   * True when `refund()` moves the money. False when refunds are made in the
+   * provider's own dashboard and the ledger is then marked refunded by hand.
+   */
+  readonly refundsViaApi: boolean;
+
+  /**
    * False when the provider has no credentials configured, so it is hidden
    * from the picker instead of failing at the moment the buyer commits.
    */
@@ -90,6 +96,13 @@ export interface PaymentProvider {
   /**
    * Refunds a settled payment. Full refund when `amountMinor` is omitted,
    * partial otherwise. Providers that cannot refund programmatically throw.
+   *
+   * `idempotencyKey`, when the provider supports one, makes a retried call
+   * return the first refund instead of issuing a second one.
    */
-  refund(providerRef: string, amountMinor?: number): Promise<void>;
+  refund(
+    providerRef: string,
+    amountMinor?: number,
+    idempotencyKey?: string,
+  ): Promise<void>;
 }

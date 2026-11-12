@@ -29,6 +29,8 @@ export class PseProvider implements PaymentProvider {
   readonly displayName = 'PSE — transferencia bancaria';
   /** PSE settles in Colombian pesos only. */
   readonly supportedCurrencies = ['COP'];
+  /** Wompi has no refund API for PSE; refunds are made in its dashboard. */
+  readonly refundsViaApi = false;
 
   private readonly logger = new Logger(PseProvider.name);
   private readonly psp?: string;
@@ -177,7 +179,11 @@ export class PseProvider implements PaymentProvider {
     };
   }
 
-  async refund(_providerRef: string, _amountMinor?: number): Promise<void> {
+  async refund(
+    _providerRef: string,
+    _amountMinor?: number,
+    _idempotencyKey?: string,
+  ): Promise<void> {
     throw new Error(
       'PSE/Wompi refunds are handled in the Wompi dashboard, not via API',
     );

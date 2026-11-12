@@ -147,8 +147,9 @@ describe('checkout — price integrity (server computes the amount)', () => {
     );
   });
 
-  it('prices in whole units for a zero-decimal currency', async () => {
-    // COP has no cents; multiplying by 100 would charge 100x.
+  it('prices COP in centavos, as Stripe and Wompi both expect', async () => {
+    // A 50,000 COP product is 5,000,000 centavos. Sending 50000 (treating COP
+    // as zero-decimal) would have charged 500 COP.
     const { service, payments } = build({
       products: { p1: activeProduct('p1', 50000) },
       currency: 'COP',
@@ -160,7 +161,23 @@ describe('checkout — price integrity (server computes the amount)', () => {
     );
 
     expect(payments.startPayment).toHaveBeenCalledWith(
-      expect.objectContaining({ amountMinor: 50000 }),
+      expect.objectContaining({ amountMinor: 5000000 }),
+    );
+  });
+
+  it('prices in whole units for a true zero-decimal currency', async () => {
+    const { service, payments } = build({
+      products: { p1: activeProduct('p1', 500) },
+      currency: 'JPY',
+    });
+
+    await service.checkout(
+      USER_ID,
+      cart([{ productId: 'p1', size: 'M', quantity: 1 }]),
+    );
+
+    expect(payments.startPayment).toHaveBeenCalledWith(
+      expect.objectContaining({ amountMinor: 500 }),
     );
   });
 

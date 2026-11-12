@@ -9,7 +9,9 @@ import {
   UseGuards,
   Req,
   Query,
+  Headers,
 } from '@nestjs/common';
+import { idempotencyKeyFrom } from '../../payments/idempotency-key';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ClassesService } from '../services/classes.service';
 import { GroupClassService } from '../services/group-class.service';
@@ -90,12 +92,14 @@ export class ClassesController {
     @Req() req: any,
     @Param('id') id: string,
     @Body() dto: PurchaseSeatDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     return this.groupCheckout.startSeatPurchase(
       id,
       req.user._id.toString(),
       dto.paymentMethod,
       req.user.email,
+      idempotencyKeyFrom(idempotencyKey),
     );
   }
 

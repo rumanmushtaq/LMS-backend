@@ -51,6 +51,13 @@ describe('PaymentsService', () => {
         return created;
       }),
       findOne: jest.fn(),
+      // Mirrors the conditional write: applies only while the row the test
+      // handed to findOne is not already PAID.
+      findOneAndUpdate: jest.fn(async (filter: any, update: any) => {
+        const doc = await model.findOne(filter);
+        if (!doc || doc.status === filter.status?.$ne) return null;
+        return Object.assign(doc, update.$set);
+      }),
       exists: jest.fn(),
       aggregate: jest.fn().mockResolvedValue([]),
     };
@@ -135,8 +142,10 @@ describe('PaymentsService', () => {
     it('marks the row failed when the provider rejects it', async () => {
       provider.createPayment.mockRejectedValue(new Error('card network down'));
 
+      // The buyer gets a plain, retryable message; the raw error stays on
+      // the row for admins.
       await expect(service.startPayment(startInput)).rejects.toThrow(
-        'card network down',
+        'could not start this payment',
       );
       expect(created.status).toBe(PaymentStatus.FAILED);
       expect(created.failureReason).toContain('card network down');

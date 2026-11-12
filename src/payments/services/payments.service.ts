@@ -2,8 +2,12 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   BadRequestException,
+  ConflictException,
+  BadGatewayException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
@@ -15,9 +19,40 @@ import {
 import { RevenueArea } from '../schemas/platform-settings.schema';
 import { PlatformSettingsService } from './platform-settings.service';
 import { PaymentProviderRegistry } from '../providers/provider.registry';
-import { PaymentInstruction } from '../providers/payment-provider.interface';
+import {
+  CreatePaymentResult,
+  PaymentInstruction,
+} from '../providers/payment-provider.interface';
 import { splitCommission } from '../money';
 import { FulfilmentRegistry } from './fulfilment.registry';
+
+/** How long a repeated request waits for the first one's provider call. */
+const REPLAY_WAIT_MS = 5000;
+const REPLAY_POLL_MS = 250;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** What a buyer sees when the provider would not start their payment. */
+const PROVIDER_START_FAILED =
+  'The payment provider could not start this payment. Please try again in a moment.';
+
+/**
+ * Why a payment failed, in words safe to show the buyer. A decline from the
+ * provider ("card declined") helps them; an error from starting the payment
+ * is about our setup and can name internal configuration, so stays generic.
+ */
+const buyerFacingReason = (payment: {
+  providerRef?: string | null;
+  failureReason?: string | null;
+  status: string;
+}) =>
+  payment.providerRef
+    ? (payment.failureReason ?? payment.status)
+    : PROVIDER_START_FAILED;
+
+/** MongoDB's duplicate-key error, raised by a unique index. */
+const isDuplicateKeyError = (error: unknown) =>
+  (error as { code?: number } | null)?.code === 11000;
 
 export interface StartPaymentInput {
   buyerId: string;
@@ -31,6 +66,11 @@ export interface StartPaymentInput {
   providerId: string;
   buyerEmail?: string;
   returnUrl?: string;
+  /**
+   * The client's Idempotency-Key for this checkout attempt. A repeated
+   * request with the same key gets the first payment back, not a new one.
+   */
+  idempotencyKey?: string;
 }
 
 export interface StartPaymentResult {
@@ -53,7 +93,19 @@ export class PaymentsService {
     private readonly settings: PlatformSettingsService,
     private readonly registry: PaymentProviderRegistry,
     private readonly fulfilment: FulfilmentRegistry,
+    @Optional() private readonly config?: ConfigService,
   ) {}
+
+  /**
+   * Where a redirect flow (PSE) sends the buyer back to: the web app's
+   * payment-return page, which shows how the payment went.
+   */
+  private returnUrlFor(paymentId: string, override?: string): string | undefined {
+    if (override) return override;
+    const base = this.config?.get<string>('app.frontendUrl');
+    if (!base) return undefined;
+    return `${base.replace(/\/+$/, '')}/payment/return?paymentId=${paymentId}`;
+  }
 
   /** Payment methods to offer this buyer, in admin-configured order. */
   async availableMethods() {
@@ -95,21 +147,46 @@ export class PaymentsService {
     );
     const split = splitCommission(input.amountMinor, commissionPercent);
 
-    const payment = await this.paymentModel.create({
-      buyerId: new Types.ObjectId(input.buyerId),
-      sellerId: input.sellerId ? new Types.ObjectId(input.sellerId) : null,
-      area: input.area,
-      referenceId: new Types.ObjectId(input.referenceId),
-      provider: provider.id,
-      providerRef: null,
-      grossMinor: split.grossMinor,
-      commissionMinor: split.commissionMinor,
-      netMinor: split.netMinor,
-      commissionPercent: split.commissionPercent,
-      currency,
-      status: PaymentStatus.PENDING,
-      payoutStatus: PayoutStatus.OWED,
-    });
+    const buyerId = new Types.ObjectId(input.buyerId);
+    const key = input.idempotencyKey || null;
+    if (key) {
+      const existing = await this.paymentModel.findOne({
+        buyerId,
+        idempotencyKey: key,
+      });
+      if (existing) return this.replay(existing, input);
+    }
+
+    let payment: PaymentDocument;
+    try {
+      payment = await this.paymentModel.create({
+        buyerId,
+        sellerId: input.sellerId ? new Types.ObjectId(input.sellerId) : null,
+        area: input.area,
+        referenceId: new Types.ObjectId(input.referenceId),
+        provider: provider.id,
+        providerRef: null,
+        grossMinor: split.grossMinor,
+        commissionMinor: split.commissionMinor,
+        netMinor: split.netMinor,
+        commissionPercent: split.commissionPercent,
+        currency,
+        status: PaymentStatus.PENDING,
+        payoutStatus: PayoutStatus.OWED,
+        idempotencyKey: key,
+      });
+    } catch (error) {
+      // Two requests with one key raced past the lookup above; the unique
+      // index let only one insert through. Answer with that one.
+      if (key && isDuplicateKeyError(error)) {
+        const existing = await this.paymentModel.findOne({
+          buyerId,
+          idempotencyKey: key,
+        });
+        if (existing) return this.replay(existing, input);
+      }
+      throw error;
+    }
 
     try {
       const created = await provider.createPayment({
@@ -118,7 +195,7 @@ export class PaymentsService {
         paymentId: payment._id.toString(),
         description: input.description,
         buyerEmail: input.buyerEmail,
-        returnUrl: input.returnUrl,
+        returnUrl: this.returnUrlFor(payment._id.toString(), input.returnUrl),
       });
 
       payment.providerRef = created.providerRef;
@@ -145,8 +222,86 @@ export class PaymentsService {
       this.logger.error(
         `Provider ${provider.id} failed to create payment ${payment._id}: ${payment.failureReason}`,
       );
-      throw error;
+      // The raw provider error (kept on the row for admins) can name our
+      // configuration; the buyer gets a plain, retryable message instead.
+      throw new BadGatewayException(PROVIDER_START_FAILED);
     }
+  }
+
+  /**
+   * Answers a repeated checkout request with the payment its first request
+   * created, so a double-clicked "Pay" never opens a second charge.
+   *
+   * The provider instruction is asked for again with the same paymentId:
+   * Stripe dedupes on `payment_<id>` and hands back the same PaymentIntent,
+   * and PSE's redirect URL is derived from the paymentId, so both return what
+   * the first request got.
+   */
+  private async replay(
+    existing: PaymentDocument,
+    input: StartPaymentInput,
+  ): Promise<StartPaymentResult> {
+    if (
+      existing.provider !== input.providerId ||
+      String(existing.referenceId) !== input.referenceId ||
+      existing.area !== input.area
+    ) {
+      throw new ConflictException(
+        'This Idempotency-Key was already used for a different checkout',
+      );
+    }
+
+    // The first request may still be talking to the provider.
+    let current: PaymentDocument | null = existing;
+    for (
+      let waited = 0;
+      current?.status === PaymentStatus.PENDING && waited < REPLAY_WAIT_MS;
+      waited += REPLAY_POLL_MS
+    ) {
+      await sleep(REPLAY_POLL_MS);
+      current = await this.paymentModel.findById(existing._id);
+    }
+    if (!current || current.status === PaymentStatus.PENDING) {
+      throw new ConflictException('This checkout is already being started');
+    }
+    if (current.status === PaymentStatus.PAID) {
+      throw new BadRequestException('This checkout has already been paid');
+    }
+    if (current.status !== PaymentStatus.PROCESSING) {
+      throw new BadRequestException(
+        `This checkout attempt did not go through (${buyerFacingReason(current)}). Please start a new one.`,
+      );
+    }
+
+    const provider = this.registry.get(current.provider);
+    let created: CreatePaymentResult;
+    try {
+      created = await provider.createPayment({
+        amountMinor: current.grossMinor,
+        currency: current.currency,
+        paymentId: current._id.toString(),
+        description: input.description,
+        buyerEmail: input.buyerEmail,
+        returnUrl: this.returnUrlFor(current._id.toString(), input.returnUrl),
+      });
+    } catch (error) {
+      this.logger.error(
+        `Provider ${provider.id} failed to resume payment ${current._id}: ${
+          error instanceof Error ? error.message : error
+        }`,
+      );
+      throw new BadGatewayException(PROVIDER_START_FAILED);
+    }
+
+    return {
+      paymentId: current._id.toString(),
+      provider: current.provider,
+      grossMinor: current.grossMinor,
+      commissionMinor: current.commissionMinor,
+      netMinor: current.netMinor,
+      currency: current.currency,
+      instruction: created.instruction,
+    };
   }
 
   /**
@@ -185,6 +340,15 @@ export class PaymentsService {
       return null;
     }
 
+    // Every write below is conditional on the row not being PAID yet, and
+    // happens in one atomic findOneAndUpdate. Two deliveries of the same
+    // event arriving together both pass the check above, but only one of
+    // them can win this write — so fulfilment runs exactly once.
+    const notYetPaid = {
+      _id: payment._id,
+      status: { $ne: PaymentStatus.PAID },
+    };
+
     if (state.status === PaymentStatus.PAID) {
       // Trust the provider's amount over our own record. A mismatch means the
       // buyer was charged something different from what we priced, which must
@@ -193,10 +357,13 @@ export class PaymentsService {
         state.amountMinor !== undefined &&
         state.amountMinor !== payment.grossMinor
       ) {
-        payment.status = PaymentStatus.FAILED;
-        payment.failureReason = `Amount mismatch: charged ${state.amountMinor}, expected ${payment.grossMinor}`;
-        payment.providerMetadata = state.raw ?? {};
-        await payment.save();
+        await this.paymentModel.findOneAndUpdate(notYetPaid, {
+          $set: {
+            status: PaymentStatus.FAILED,
+            failureReason: `Amount mismatch: charged ${state.amountMinor}, expected ${payment.grossMinor}`,
+            providerMetadata: state.raw ?? {},
+          },
+        });
 
         this.logger.error(
           `Payment ${payment._id} amount mismatch — charged ${state.amountMinor}, expected ${payment.grossMinor}`,
@@ -204,21 +371,35 @@ export class PaymentsService {
         return null;
       }
 
-      payment.status = PaymentStatus.PAID;
-      payment.paidAt = new Date();
-    } else {
-      payment.status = state.status;
-      payment.failureReason = state.failureReason ?? null;
-      if (state.status === PaymentStatus.REFUNDED) {
-        // Nothing is owed on money that went back to the buyer.
-        payment.payoutStatus = PayoutStatus.VOID;
+      const settled = await this.paymentModel.findOneAndUpdate(
+        notYetPaid,
+        {
+          $set: {
+            status: PaymentStatus.PAID,
+            paidAt: new Date(),
+            providerMetadata: state.raw ?? {},
+          },
+        },
+        { new: true },
+      );
+      if (!settled) {
+        this.logger.debug(`Ignoring duplicate settlement for ${payment._id}`);
       }
+      return settled;
     }
 
-    payment.providerMetadata = state.raw ?? {};
-    await payment.save();
-
-    return payment.status === PaymentStatus.PAID ? payment : null;
+    await this.paymentModel.findOneAndUpdate(notYetPaid, {
+      $set: {
+        status: state.status,
+        failureReason: state.failureReason ?? null,
+        providerMetadata: state.raw ?? {},
+        // Nothing is owed on money that went back to the buyer.
+        ...(state.status === PaymentStatus.REFUNDED
+          ? { payoutStatus: PayoutStatus.VOID }
+          : {}),
+      },
+    });
+    return null;
   }
 
   /** Verifies and applies a webhook. Returns the settled payment, if any. */
@@ -235,6 +416,14 @@ export class PaymentsService {
     const state = await provider.parseWebhook(rawBody, headers);
     if (!state) return null;
 
+    // A refund made in the provider's dashboard: sync the ledger and revoke
+    // what was bought, exactly as an admin refund does.
+    if (state.status === PaymentStatus.REFUNDED) {
+      const refunded = await this.applyProviderRefund(state.providerRef);
+      if (refunded) await this.fulfilment.refund(refunded);
+      return null;
+    }
+
     const settled = await this.applyProviderState(state);
 
     // Hand off to whichever area this paid for. Only reached when this call is
@@ -244,6 +433,58 @@ export class PaymentsService {
     }
 
     return settled;
+  }
+
+  /**
+   * Marks a paid payment refunded because the provider says it was.
+   *
+   * One conditional write (PAID → REFUNDED), so a redelivered refund event, or
+   * one racing an admin refund, revokes access only once. Returns the payment
+   * when this call made the change, null otherwise.
+   */
+  async applyProviderRefund(
+    providerRef: string,
+  ): Promise<PaymentDocument | null> {
+    return this.paymentModel.findOneAndUpdate(
+      { providerRef, status: PaymentStatus.PAID },
+      {
+        $set: {
+          status: PaymentStatus.REFUNDED,
+          payoutStatus: PayoutStatus.VOID,
+          failureReason: 'Refunded at the provider',
+        },
+      },
+      { new: true },
+    );
+  }
+
+  /**
+   * How a buyer's payment stands — what the payment-return page polls while
+   * the webhook is on its way. Only the buyer can see their own payment.
+   */
+  async statusForBuyer(paymentId: string, buyerId: string) {
+    if (!Types.ObjectId.isValid(paymentId)) {
+      throw new NotFoundException('Payment not found');
+    }
+    const payment = await this.paymentModel
+      .findOne({
+        _id: new Types.ObjectId(paymentId),
+        buyerId: new Types.ObjectId(buyerId),
+      })
+      .lean();
+    if (!payment) throw new NotFoundException('Payment not found');
+    return {
+      paymentId: String(payment._id),
+      status: payment.status,
+      area: payment.area,
+      referenceId: String(payment.referenceId),
+      grossMinor: payment.grossMinor,
+      currency: payment.currency,
+      failureReason:
+        payment.status === PaymentStatus.FAILED
+          ? buyerFacingReason(payment)
+          : null,
+    };
   }
 
   /** Has this reference been paid for? Used to gate access to what was bought. */

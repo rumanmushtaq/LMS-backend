@@ -84,6 +84,13 @@ export class ShopOrder {
   @ApiProperty({ description: 'Shipping address' })
   @Prop({ type: Object })
   shippingAddress?: ShippingAddress;
+
+  @ApiProperty({
+    description: 'Client-sent Idempotency-Key of the checkout that created it',
+    required: false,
+  })
+  @Prop({ type: String, default: null })
+  idempotencyKey?: string | null;
 }
 
 export const ShopOrderSchema = SchemaFactory.createForClass(ShopOrder);
@@ -102,3 +109,11 @@ ShopOrderSchema.index(
   },
 );
 ShopOrderSchema.index({ createdAt: -1 });
+// One order per checkout attempt — see the matching index on Payment.
+ShopOrderSchema.index(
+  { userId: 1, idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+  },
+);

@@ -8,11 +8,17 @@ import {
 
 describe('money', () => {
   describe('currency minor units', () => {
-    it('treats COP as zero-decimal so amounts are not charged 100x', () => {
-      expect(isZeroDecimal('COP')).toBe(true);
-      expect(minorUnitsPerMajor('COP')).toBe(1);
-      // 50,000 COP is 50000 minor units, not 5,000,000.
-      expect(toMinorUnits(50000, 'COP')).toBe(50000);
+    it('charges COP in centavos, as Stripe and Wompi both expect', () => {
+      // Stripe: COP is two-decimal. Wompi: amount_in_cents is centavos.
+      // 50,000 COP is 5,000,000 centavos; sending 50000 would charge 500 COP.
+      expect(isZeroDecimal('COP')).toBe(false);
+      expect(minorUnitsPerMajor('COP')).toBe(100);
+      expect(toMinorUnits(50000, 'COP')).toBe(5000000);
+    });
+
+    it('still treats a true zero-decimal currency as whole units', () => {
+      expect(isZeroDecimal('JPY')).toBe(true);
+      expect(toMinorUnits(500, 'JPY')).toBe(500);
     });
 
     it('treats USD as two-decimal', () => {
@@ -21,7 +27,8 @@ describe('money', () => {
     });
 
     it('is case-insensitive about the currency code', () => {
-      expect(isZeroDecimal('cop')).toBe(true);
+      expect(isZeroDecimal('jpy')).toBe(true);
+      expect(isZeroDecimal('cop')).toBe(false);
     });
 
     it('rounds rather than truncating float artefacts', () => {
@@ -45,7 +52,7 @@ describe('money', () => {
 
     it('round-trips through major units', () => {
       expect(toMajorUnits(1999, 'USD')).toBe(19.99);
-      expect(toMajorUnits(50000, 'COP')).toBe(50000);
+      expect(toMajorUnits(5000000, 'COP')).toBe(50000);
     });
 
     it('rejects non-finite amounts instead of storing NaN', () => {

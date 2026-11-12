@@ -31,6 +31,7 @@ export class GroupClassCheckoutService {
     studentId: string,
     providerId: string,
     buyerEmail?: string,
+    idempotencyKey?: string,
   ): Promise<StartPaymentResult> {
     const cls = await this.groupClasses.loadJoinable(classId, studentId);
 
@@ -58,6 +59,7 @@ export class GroupClassCheckoutService {
       description: `Seat in "${cls.title}"`,
       providerId,
       buyerEmail,
+      idempotencyKey,
     });
   }
 }

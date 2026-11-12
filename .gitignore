@@ -54,3 +54,11 @@ pids
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# migration local secrets + artifacts
+migration/.env
+migration/backups/
+migration/errors/
+migration/mapping.md
+migration/media-map.json
+migration/media-run*.log

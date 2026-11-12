@@ -40,6 +40,7 @@ export class StripeProvider implements PaymentProvider {
   readonly id = 'stripe';
   readonly displayName = 'Credit or debit card';
   readonly supportedCurrencies: string[] = [];
+  readonly refundsViaApi = true;
 
   private readonly logger = new Logger(StripeProvider.name);
   private readonly stripe: StripeClient | null = null;
@@ -132,6 +133,29 @@ export class StripeProvider implements PaymentProvider {
         );
       case 'payment_intent.canceled':
         return this.toState(intent, PaymentStatus.CANCELLED);
+      case 'charge.refunded': {
+        // A refund made in the Stripe dashboard. Only a full refund maps onto
+        // the ledger, which has no partial-refund state; a partial one is
+        // left for an admin to look at rather than voiding the whole sale.
+        const charge = event.data.object as unknown as {
+          payment_intent?: string | null;
+          refunded?: boolean;
+          amount?: number;
+          currency?: string;
+        };
+        if (!charge.payment_intent || !charge.refunded) {
+          this.logger.warn(
+            `Partial Stripe refund on ${charge.payment_intent ?? 'unknown intent'} — not applied to the ledger`,
+          );
+          return null;
+        }
+        return {
+          providerRef: charge.payment_intent,
+          status: PaymentStatus.REFUNDED,
+          amountMinor: charge.amount,
+          currency: charge.currency?.toUpperCase(),
+        };
+      }
       default:
         // Everything else is noise we deliberately ignore, but the endpoint
         // still has to 200 or Stripe will retry it forever.
@@ -155,12 +179,22 @@ export class StripeProvider implements PaymentProvider {
     return this.toState(intent, status);
   }
 
-  async refund(providerRef: string, amountMinor?: number): Promise<void> {
-    await this.client().refunds.create(
+  async refund(
+    providerRef: string,
+    amountMinor?: number,
+    idempotencyKey?: string,
+  ): Promise<void> {
+    const params =
       amountMinor === undefined
         ? { payment_intent: providerRef }
-        : { payment_intent: providerRef, amount: amountMinor },
-    );
+        : { payment_intent: providerRef, amount: amountMinor };
+    // Stripe returns the first refund for a repeated key instead of issuing
+    // another, so a retried request cannot refund the buyer twice.
+    if (idempotencyKey) {
+      await this.client().refunds.create(params, { idempotencyKey });
+    } else {
+      await this.client().refunds.create(params);
+    }
   }
 
   private toState(
