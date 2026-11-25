@@ -2,12 +2,17 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as path from 'path';
 import { ClassesService } from '../classes/services/classes.service';
+import {
+  STUDENTS_ONLY_MESSAGE,
+  TeacherStreamsService,
+} from '../teacher-streams/teacher-streams.service';
 
 const CLASS_ID_RE = /^[a-f0-9]{24}$/i;
 // Exactly the files the relay's ffmpeg writes — nothing else is servable.
@@ -43,6 +48,8 @@ export class LiveHlsService {
     private readonly classesService: ClassesService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    // Optional so the class-only specs can build the service without it.
+    @Optional() private readonly teacherStreams?: TeacherStreamsService,
   ) {}
 
   private get hlsDir(): string {
@@ -52,12 +59,18 @@ export class LiveHlsService {
     );
   }
 
-  /** May this user watch the class right now? */
+  /**
+   * May this user watch right now? The id is a class or a teacher stream.
+   * Streams have their own rule (students only), checked before the admin
+   * pass so an admin cannot watch a teacher's stream either.
+   */
   private async mayWatch(
     classId: string,
     userId: string,
     role: string,
   ): Promise<boolean> {
+    const stream = await this.teacherStreams?.findBroadcastTarget(classId);
+    if (stream) return this.teacherStreams!.mayWatch(stream, userId, role);
     if (role === 'admin') return true;
     const cls = await this.classesService.findOne(classId);
     if (idOf(cls.tutorId) === userId) return true;
@@ -70,7 +83,10 @@ export class LiveHlsService {
     role: string,
   ): Promise<string> {
     if (!(await this.mayWatch(classId, userId, role))) {
-      throw new ForbiddenException('You are not enrolled in this class');
+      const isStream = !!(await this.teacherStreams?.findBroadcastTarget(classId));
+      throw new ForbiddenException(
+        isStream ? STUDENTS_ONLY_MESSAGE : 'You are not enrolled in this class',
+      );
     }
     // `role` rides in the token so playback can re-authorise without another
     // user lookup on every segment.

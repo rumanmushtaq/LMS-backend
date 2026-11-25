@@ -3,12 +3,14 @@ import {
   ForbiddenException,
   Injectable,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ClassesService } from '../classes/services/classes.service';
+import { TeacherStreamsService } from '../teacher-streams/teacher-streams.service';
 import { buildFfmpegArgs, buildHlsArgs, isH264Mime, rtmpTarget } from './ffmpeg-args';
 
 /** The slice of a child process the relay actually uses — swappable in tests. */
@@ -33,9 +35,15 @@ interface Session {
   killTimer: NodeJS.Timeout | null;
   /** Set for self-hosted sessions; removed when the broadcast ends (live-only). */
   hlsDir: string | null;
+  /** Teacher streams report video flow so the stale sweep leaves them be. */
+  isStream: boolean;
+  lastHeartbeatAt: number;
 }
 
 const KILL_GRACE_MS = 3000;
+
+/** How often a running teacher stream records that video is still flowing. */
+const HEARTBEAT_EVERY_MS = 30_000;
 
 /**
  * Browser→RTMP relay: one ffmpeg process per live class. The tutor's browser
@@ -58,6 +66,8 @@ export class IngestService {
   constructor(
     private readonly classesService: ClassesService,
     private readonly config: ConfigService,
+    // Optional so the class-only specs can build the service without it.
+    @Optional() private readonly teacherStreams?: TeacherStreamsService,
   ) {}
 
   private get ffmpegPath(): string {
@@ -86,13 +96,25 @@ export class IngestService {
     mimeType: string | undefined,
     onEvent: IngestEventHandler,
   ): Promise<void> {
-    const cls = await this.classesService.findOne(classId);
-    const tutorId = (cls.tutorId as any)?._id?.toString?.() ?? String(cls.tutorId);
+    // The id is a live class or a teacher stream; both carry a liveSession.
+    const stream = await this.teacherStreams?.findBroadcastTarget(classId);
+    let tutorId: string;
+    let live: any;
+    if (stream) {
+      if (!stream.active) {
+        throw new BadRequestException('This stream has ended. Start a new one.');
+      }
+      tutorId = stream.tutorId;
+      live = stream.liveSession;
+    } else {
+      const cls = await this.classesService.findOne(classId);
+      tutorId = (cls.tutorId as any)?._id?.toString?.() ?? String(cls.tutorId);
+      live = cls.liveSession;
+    }
     if (tutorId !== userId) {
       throw new ForbiddenException('Only the class tutor can broadcast');
     }
 
-    const live = cls.liveSession;
     const isSelfHosted = live?.provider === 'self';
     if (!isSelfHosted && (!live?.rtmpUrl || !live?.streamKey)) {
       throw new BadRequestException(
@@ -133,6 +155,8 @@ export class IngestService {
       stopping: false,
       killTimer: null,
       hlsDir,
+      isStream: !!stream,
+      lastHeartbeatAt: 0,
     };
     this.sessions.set(classId, session);
 
@@ -176,6 +200,13 @@ export class IngestService {
       throw new ForbiddenException('Only the class tutor can broadcast');
     }
     session.proc.stdin.write(chunk);
+
+    if (session.isStream && Date.now() - session.lastHeartbeatAt > HEARTBEAT_EVERY_MS) {
+      session.lastHeartbeatAt = Date.now();
+      this.teacherStreams?.heartbeat(classId).catch((err: any) =>
+        this.logger.warn(`Stream heartbeat failed: ${err?.message}`),
+      );
+    }
   }
 
   stop(classId: string, userId: string): void {

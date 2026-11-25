@@ -35,6 +35,7 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { TeacherStreamsModule } from './teacher-streams/teacher-streams.module';
 import { SessionActivityInterceptor } from './auth/interceptors/session-activity.interceptor';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TutorsModule } from './tutors/tutors.module';
@@ -114,6 +115,7 @@ import { IpSecurityMiddleware } from './security/middleware/ip-security.middlewa
     ClassesModule,
     IngestModule,
     LiveHlsModule,
+    TeacherStreamsModule,
     PaymentsModule,
     SecurityModule,
     DashboardModule,
