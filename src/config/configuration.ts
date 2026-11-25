@@ -134,8 +134,9 @@ export const liveConfig = registerAs('live', () => ({
   // Broadcast provider for NEW live classes: 'vimeo' (default) or 'youtube'.
   // Existing sessions always stay on the provider they were created with.
   provider: process.env.LIVE_PROVIDER || 'vimeo',
-  // Provider for NEW teacher streams; YouTube unless set otherwise.
-  streamProvider: process.env.TEACHER_STREAM_PROVIDER || 'youtube',
+  // Provider for NEW teacher streams. Unset: YouTube when its credentials
+  // are present, otherwise self-hosted (see LiveStreamingService).
+  streamProvider: process.env.TEACHER_STREAM_PROVIDER || undefined,
 }));
 
 export const youtubeConfig = registerAs('youtube', () => ({

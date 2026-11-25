@@ -197,20 +197,38 @@ describe("provider 'self' (our own HLS delivery)", () => {
 });
 
 describe('teacher stream provider', () => {
-  it('defaults to YouTube even when classes use Vimeo', async () => {
-    const { service, youtube, vimeo } = makeService(undefined);
+  const withConfig = (values: Record<string, string>) =>
+    new LiveStreamingService(
+      { get: (key: string) => values[key] } as ConfigService,
+      {} as any,
+      {} as any,
+    );
+  const YOUTUBE_KEYS = {
+    'youtube.clientId': 'id',
+    'youtube.clientSecret': 'secret',
+    'youtube.refreshToken': 'refresh',
+  };
+
+  it('uses YouTube when its credentials are present, even if classes use Vimeo', () => {
+    const service = withConfig({ 'live.provider': 'vimeo', ...YOUTUBE_KEYS });
     expect(service.streamProvider).toBe('youtube');
-    const event = await service.provision('Q&A', service.streamProvider);
-    expect(youtube.createLiveEvent).toHaveBeenCalledWith('Q&A');
-    expect(vimeo.createLiveEvent).not.toHaveBeenCalled();
-    expect(event.provider).toBe('youtube');
+  });
+
+  it('falls back to our own server, never Vimeo, without YouTube credentials', () => {
+    const service = withConfig({ 'live.provider': 'vimeo' });
+    expect(service.streamProvider).toBe('self');
   });
 
   it('follows TEACHER_STREAM_PROVIDER when it is set', () => {
-    const config = {
-      get: (key: string) => (key === 'live.streamProvider' ? 'self' : undefined),
-    } as ConfigService;
-    const service = new LiveStreamingService(config, {} as any, {} as any);
+    const service = withConfig({ 'live.streamProvider': 'self', ...YOUTUBE_KEYS });
     expect(service.streamProvider).toBe('self');
+  });
+
+  it('provisions a stream on the provider it is given', async () => {
+    const { service, youtube, vimeo } = makeService('vimeo');
+    const event = await service.provision('Q&A', 'youtube');
+    expect(youtube.createLiveEvent).toHaveBeenCalledWith('Q&A');
+    expect(vimeo.createLiveEvent).not.toHaveBeenCalled();
+    expect(event.provider).toBe('youtube');
   });
 });

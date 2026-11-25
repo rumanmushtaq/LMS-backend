@@ -45,9 +45,21 @@ export class LiveStreamingService {
     return this.asProvider(this.config.get<string>('live.provider'));
   }
 
-  /** Provider new teacher streams are provisioned on (YouTube by default). */
+  /**
+   * Provider new teacher streams are provisioned on: TEACHER_STREAM_PROVIDER
+   * when set; otherwise YouTube if its credentials are present, else our own
+   * server ('self'), which needs no outside account. Never Vimeo by default.
+   */
   get streamProvider(): LiveProvider {
-    return this.asProvider(this.config.get<string>('live.streamProvider') ?? 'youtube');
+    const configured = this.config.get<string>('live.streamProvider');
+    if (configured) return this.asProvider(configured);
+    return this.youtubeConfigured ? 'youtube' : 'self';
+  }
+
+  private get youtubeConfigured(): boolean {
+    return ['youtube.clientId', 'youtube.clientSecret', 'youtube.refreshToken'].every(
+      (key) => !!this.config.get<string>(key),
+    );
   }
 
   private asProvider(configured: string | undefined): LiveProvider {
