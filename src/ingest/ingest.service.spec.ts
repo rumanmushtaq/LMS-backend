@@ -108,6 +108,16 @@ describe('start', () => {
     expect(procs[0].cmd).toBe('/home/x/bin/ffmpeg');
   });
 
+  it('falls back to the bundled ffmpeg when FFMPEG_PATH is not set', async () => {
+    // The production server has no system ffmpeg; the npm-bundled static
+    // build is what makes live video work there.
+    const { service, procs, onEvent } = makeService({ ffmpegPath: '' });
+    await service.start('class-1', TUTOR, 'video/webm', onEvent);
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    expect(procs[0].cmd).toBe(require('@ffmpeg-installer/ffmpeg').path);
+    expect(procs[0].cmd).toContain('@ffmpeg-installer');
+  });
+
   it('refuses a user who does not own the class', async () => {
     const { service, onEvent } = makeService();
     await expect(

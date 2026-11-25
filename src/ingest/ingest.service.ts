@@ -13,6 +13,21 @@ import { ClassesService } from '../classes/services/classes.service';
 import { TeacherStreamsService } from '../teacher-streams/teacher-streams.service';
 import { buildFfmpegArgs, buildHlsArgs, isH264Mime, rtmpTarget } from './ffmpeg-args';
 
+/**
+ * The static ffmpeg shipped in node_modules by @ffmpeg-installer/ffmpeg, or
+ * null on a platform it has no build for. The production server has no
+ * system ffmpeg, so without this every live class and stream failed with
+ * "ffmpeg was not found".
+ */
+function bundledFfmpeg(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('@ffmpeg-installer/ffmpeg').path as string;
+  } catch {
+    return null;
+  }
+}
+
 /** The slice of a child process the relay actually uses — swappable in tests. */
 export interface IngestProcess {
   stdin: { write(chunk: Buffer): boolean; end(): void };
@@ -72,8 +87,13 @@ export class IngestService {
     @Optional() private readonly teacherStreams?: TeacherStreamsService,
   ) {}
 
+  /** FFMPEG_PATH when set, else the bundled build, else ffmpeg on PATH. */
   private get ffmpegPath(): string {
-    return this.config.get<string>('ingest.ffmpegPath') || 'ffmpeg';
+    return (
+      this.config.get<string>('ingest.ffmpegPath') ||
+      bundledFfmpeg() ||
+      'ffmpeg'
+    );
   }
 
   private get hlsDir(): string {

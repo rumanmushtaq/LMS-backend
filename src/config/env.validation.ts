@@ -160,10 +160,13 @@ export class EnvironmentVariables {
   @IsOptional()
   YOUTUBE_DELETE_AFTER_END: string = 'true';
 
-  // Browser->RTMP relay binary (defaults to 'ffmpeg' on PATH).
+  // Browser relay binary. Optional: see the note on the field.
   @IsString()
   @IsOptional()
-  FFMPEG_PATH: string = 'ffmpeg';
+  // No default on purpose: unset means "use the bundled static ffmpeg".
+  // A default of 'ffmpeg' here would win over that fallback and send the
+  // relay looking for a system binary the server does not have.
+  FFMPEG_PATH?: string;
 
   @IsString()
   @IsOptional()

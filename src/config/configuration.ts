@@ -123,9 +123,10 @@ export const vimeoConfig = registerAs('vimeo', () => ({
 }));
 
 export const ingestConfig = registerAs('ingest', () => ({
-  // Binary for the browser->RTMP relay. Plain 'ffmpeg' when it is on PATH;
-  // point at a static build otherwise.
-  ffmpegPath: process.env.FFMPEG_PATH || 'ffmpeg',
+  // Binary for the browser relay. Unset: the static build bundled through
+  // @ffmpeg-installer/ffmpeg, so a server without ffmpeg installed can still
+  // broadcast (see IngestService.ffmpegPath).
+  ffmpegPath: process.env.FFMPEG_PATH || undefined,
   // Where self-hosted live HLS playlists are written and served from.
   hlsDir: process.env.LIVE_HLS_DIR,
 }));

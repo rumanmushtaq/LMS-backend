@@ -22,6 +22,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@imagekit/nodejs": "^7.3.0",
     "@nestjs/common": "^10.3.0",
     "@nestjs/config": "^3.1.1",
