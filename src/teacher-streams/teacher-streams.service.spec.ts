@@ -174,7 +174,12 @@ describe('going live', () => {
 
     const live = await service.listLive();
     expect(live).toEqual([
-      expect.objectContaining({ streamId, tutorId: TUTOR, title: 'Algebra Q&A' }),
+      expect.objectContaining({
+        streamId,
+        tutorId: TUTOR,
+        tutorName: 'Ana Teacher',
+        title: 'Algebra Q&A',
+      }),
     ]);
     expect(notifications.create).toHaveBeenCalledTimes(1);
     expect(notifications.create.mock.calls[0][0]).toMatchObject({

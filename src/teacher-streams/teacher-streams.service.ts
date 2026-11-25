@@ -168,15 +168,22 @@ export class TeacherStreamsService {
     const streams = await this.streamModel
       .find({ active: true, status: LiveStatus.LIVE })
       .select('tutorId title startedAt')
+      // Name and photo for the "Live now" strip on the teachers page.
+      .populate('tutorId', 'firstName lastName kycData.avatar kycData.photoUrl')
       .sort({ startedAt: -1 })
       .lean()
       .exec();
-    return streams.map((s) => ({
-      streamId: String(s._id),
-      tutorId: String(s.tutorId),
-      title: s.title,
-      startedAt: s.startedAt,
-    }));
+    return streams.map((s: any) => {
+      const tutor = s.tutorId ?? {};
+      return {
+        streamId: String(s._id),
+        tutorId: idOf(tutor),
+        tutorName: `${tutor.firstName ?? ''} ${tutor.lastName ?? ''}`.trim(),
+        tutorPhoto: tutor.kycData?.avatar || tutor.kycData?.photoUrl || null,
+        title: s.title,
+        startedAt: s.startedAt,
+      };
+    });
   }
 
   /**
