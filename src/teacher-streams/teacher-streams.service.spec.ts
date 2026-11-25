@@ -80,6 +80,7 @@ beforeEach(async () => {
   });
 
   liveStreaming = {
+    streamProvider: 'youtube',
     provision: jest.fn().mockResolvedValue({
       provider: 'self',
       vimeoEventId: null,
@@ -124,6 +125,8 @@ describe('starting a stream', () => {
 
     expect(info.status).toBe(LiveStatus.IDLE);
     expect(info.provider).toBe('self');
+    // Streams use their own provider setting, not the live-class one.
+    expect(liveStreaming.provision).toHaveBeenCalledWith('Algebra Q&A', 'youtube');
     expect(info.conversationId).toBeTruthy();
     expect(chatService.createClassConversation).toHaveBeenCalledWith(
       [TUTOR],
@@ -339,6 +342,45 @@ describe('stale-stream sweep', () => {
     const doc = await streamModel.findById(streamId).lean<any>();
     expect(doc.active).toBe(false);
     expect(doc.endedBy).toBe('system');
+  });
+
+  const YOUTUBE_EVENT = {
+    provider: 'youtube',
+    vimeoEventId: null,
+    youtubeBroadcastId: 'b-1',
+    youtubeStreamId: 's-1',
+    rtmpUrl: 'rtmp://a.rtmp.youtube.com/live2',
+    streamKey: 'key-1',
+    embedUrl: 'https://www.youtube.com/embed/b-1',
+  };
+
+  it('ends a YouTube stream fed by the browser relay once its camera stops', async () => {
+    liveStreaming.provision.mockResolvedValue(YOUTUBE_EVENT);
+    const streamId = await startLiveStream();
+    await service.heartbeat(streamId); // the relay carried video
+    const later = new Date(Date.now() + STALE_BROADCAST_MS + 1000);
+
+    expect(await service.sweepStaleStreams(later)).toBe(1);
+    expect(liveStreaming.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves an OBS stream straight to YouTube to its teacher', async () => {
+    liveStreaming.provision.mockResolvedValue(YOUTUBE_EVENT);
+    await startLiveStream(); // no relay heartbeat: OBS pushes to YouTube itself
+    const later = new Date(Date.now() + STALE_BROADCAST_MS + 1000);
+
+    expect(await service.sweepStaleStreams(later)).toBe(0);
+    expect(await service.listLive()).toHaveLength(1);
+  });
+
+  it('deletes the unused event of a setup that never went live', async () => {
+    liveStreaming.provision.mockResolvedValue(YOUTUBE_EVENT);
+    await service.startOrResume(TUTOR);
+    const later = new Date(Date.now() + 3 * 60 * 60 * 1000);
+
+    expect(await service.sweepStaleStreams(later)).toBe(1);
+    expect(liveStreaming.teardown).toHaveBeenCalledTimes(1);
+    expect(liveStreaming.end).not.toHaveBeenCalled();
   });
 
   it('leaves a stream alone while the relay keeps reporting video', async () => {

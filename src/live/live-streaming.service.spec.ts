@@ -195,3 +195,22 @@ describe("provider 'self' (our own HLS delivery)", () => {
     expect(youtube.deleteLiveEvent).not.toHaveBeenCalled();
   });
 });
+
+describe('teacher stream provider', () => {
+  it('defaults to YouTube even when classes use Vimeo', async () => {
+    const { service, youtube, vimeo } = makeService(undefined);
+    expect(service.streamProvider).toBe('youtube');
+    const event = await service.provision('Q&A', service.streamProvider);
+    expect(youtube.createLiveEvent).toHaveBeenCalledWith('Q&A');
+    expect(vimeo.createLiveEvent).not.toHaveBeenCalled();
+    expect(event.provider).toBe('youtube');
+  });
+
+  it('follows TEACHER_STREAM_PROVIDER when it is set', () => {
+    const config = {
+      get: (key: string) => (key === 'live.streamProvider' ? 'self' : undefined),
+    } as ConfigService;
+    const service = new LiveStreamingService(config, {} as any, {} as any);
+    expect(service.streamProvider).toBe('self');
+  });
+});

@@ -79,7 +79,12 @@ export class TeacherStreamsService {
     if (existing) return this.broadcastPayload(existing);
 
     const cleanTitle = title?.trim() || 'Live stream';
-    const event = await this.liveStreaming.provision(cleanTitle);
+    // Streams have their own provider setting (YouTube unless configured
+    // otherwise), independent of the one live classes use.
+    const event = await this.liveStreaming.provision(
+      cleanTitle,
+      this.liveStreaming.streamProvider,
+    );
 
     let stream: TeacherStreamDocument;
     try {
@@ -284,7 +289,7 @@ export class TeacherStreamsService {
   async heartbeat(streamId: string): Promise<void> {
     await this.streamModel.updateOne(
       { _id: new Types.ObjectId(streamId), active: true },
-      { $set: { broadcastSeenAt: new Date() } },
+      { $set: { broadcastSeenAt: new Date(), relayed: true } },
     );
   }
 
@@ -301,9 +306,10 @@ export class TeacherStreamsService {
   }
 
   /**
-   * End streams nobody is broadcasting into any more. Only self-hosted
-   * streams carry a heartbeat (the relay is ours); an OBS stream on Vimeo or
-   * YouTube is left to its teacher, bar the abandoned-setup rule.
+   * End streams nobody is broadcasting into any more. Only streams our
+   * browser relay carries have a heartbeat (self-hosted ones always do); an
+   * OBS stream straight to YouTube or Vimeo is left to its teacher, bar the
+   * abandoned-setup rule.
    */
   async sweepStaleStreams(now = new Date()): Promise<number> {
     const staleBefore = new Date(now.getTime() - STALE_BROADCAST_MS);
@@ -313,7 +319,7 @@ export class TeacherStreamsService {
       $or: [
         {
           status: LiveStatus.LIVE,
-          'liveSession.provider': 'self',
+          $or: [{ relayed: true }, { 'liveSession.provider': 'self' }],
           broadcastSeenAt: { $lt: staleBefore },
         },
         { status: LiveStatus.IDLE, createdAt: { $lt: abandonedBefore } },
@@ -341,8 +347,10 @@ export class TeacherStreamsService {
     await stream.save();
 
     this.emitStatus(stream);
-    // Never throws: a provider hiccup must not keep a stream open.
-    await this.liveStreaming.end(stream.liveSession);
+    // Neither throws: a provider hiccup must not keep a stream open. A stream
+    // that never went live has nothing to complete — delete its unused event.
+    if (stream.startedAt) await this.liveStreaming.end(stream.liveSession);
+    else await this.liveStreaming.teardown(stream.liveSession);
   }
 
   private async findActiveFor(tutorId: string) {

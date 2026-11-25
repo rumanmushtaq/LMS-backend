@@ -66,6 +66,14 @@ export class TeacherStream {
    */
   @Prop({ type: Date, default: null })
   broadcastSeenAt: Date | null;
+
+  /**
+   * True once our browser relay has carried video for this stream. Only
+   * relayed streams have a heartbeat to go stale; an OBS stream straight to
+   * YouTube never does, so the sweep must leave it to its teacher.
+   */
+  @Prop({ type: Boolean, default: false })
+  relayed: boolean;
 }
 
 export const TeacherStreamSchema = SchemaFactory.createForClass(TeacherStream);

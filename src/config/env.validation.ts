@@ -134,6 +134,12 @@ export class EnvironmentVariables {
   @IsOptional()
   LIVE_PROVIDER: string = 'vimeo';
 
+  // Provider for NEW teacher "go live" streams, set apart from classes so
+  // streams can stay on YouTube whatever LIVE_PROVIDER says.
+  @IsIn(['vimeo', 'youtube', 'self'])
+  @IsOptional()
+  TEACHER_STREAM_PROVIDER: string = 'youtube';
+
   // YouTube Live — optional so the app still boots without it; live-class
   // endpoints fail clearly at call time if credentials are missing.
   @IsString()

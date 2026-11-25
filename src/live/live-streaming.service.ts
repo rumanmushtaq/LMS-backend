@@ -42,7 +42,15 @@ export class LiveStreamingService {
 
   /** Provider new live sessions are provisioned on. */
   get provider(): LiveProvider {
-    const configured = this.config.get<string>('live.provider');
+    return this.asProvider(this.config.get<string>('live.provider'));
+  }
+
+  /** Provider new teacher streams are provisioned on (YouTube by default). */
+  get streamProvider(): LiveProvider {
+    return this.asProvider(this.config.get<string>('live.streamProvider') ?? 'youtube');
+  }
+
+  private asProvider(configured: string | undefined): LiveProvider {
     if (configured === 'youtube' || configured === 'self') return configured;
     return 'vimeo';
   }
@@ -61,8 +69,11 @@ export class LiveStreamingService {
     return !!(live?.vimeoEventId || live?.youtubeBroadcastId);
   }
 
-  async provision(title: string): Promise<ProvisionedLive> {
-    if (this.provider === 'self') {
+  async provision(
+    title: string,
+    provider: LiveProvider = this.provider,
+  ): Promise<ProvisionedLive> {
+    if (provider === 'self') {
       // Nothing external to create: the ingest relay writes HLS on our own
       // disk and the player fetches it through the token-gated endpoint.
       // `embedUrl` is a marker (the frontend builds the real URL per viewer).
@@ -77,7 +88,7 @@ export class LiveStreamingService {
       };
     }
 
-    if (this.provider === 'youtube') {
+    if (provider === 'youtube') {
       const event = await this.youtube.createLiveEvent(title);
       return {
         provider: 'youtube',
