@@ -14,6 +14,7 @@ import { IngestService } from './ingest.service';
 const TUTOR = 'tutor-1';
 
 class FakeProc {
+  pid: number | undefined = 4242;
   args: string[];
   cmd: string;
   written: Buffer[] = [];
@@ -180,6 +181,23 @@ describe('lifecycle', () => {
 
     const err = events.find((e) => e.event === 'error');
     expect(err?.detail?.toLowerCase()).toContain('ffmpeg');
+  });
+
+  it('never reports ready when ffmpeg could not be started', async () => {
+    // A missing binary leaves pid undefined; going "live" then would show
+    // students a LIVE badge over a player that never gets any video.
+    const { service, procs, events, onEvent } = makeService();
+    const spawn = service.spawnFn;
+    service.spawnFn = (cmd, args) => {
+      const p = spawn(cmd, args) as unknown as FakeProc;
+      p.pid = undefined;
+      return p as any;
+    };
+    await service.start('class-1', TUTOR, 'video/webm', onEvent);
+    procs[0].emit('error', Object.assign(new Error('spawn ffmpeg ENOENT'), { code: 'ENOENT' }));
+
+    expect(events.map((e) => e.event)).toEqual(['error']);
+    expect(events[0].detail).toContain('ffmpeg was not found');
   });
 
   it('stop() ends stdin gracefully and clears the session on exit', async () => {

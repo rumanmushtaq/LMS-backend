@@ -19,6 +19,8 @@ export interface IngestProcess {
   stderr?: { on(event: 'data', cb: (d: Buffer) => void): void } | null;
   kill(signal?: NodeJS.Signals): void;
   on(event: 'exit' | 'error', cb: (...args: any[]) => void): void;
+  /** Undefined when the process could not be started (e.g. ffmpeg missing). */
+  pid?: number;
 }
 
 export type SpawnFn = (cmd: string, args: string[]) => IngestProcess;
@@ -186,6 +188,11 @@ export class IngestService {
         onEvent('error', detail);
       }
     });
+
+    // Node leaves `pid` undefined when the binary could not be started; the
+    // 'error' handler above then reports why. Saying "ready" anyway made the
+    // page go live with no video behind it, so students waited forever.
+    if (proc.pid === undefined) return;
 
     this.logger.log(`Broadcast relay started for class ${classId}`);
     onEvent('ready');
