@@ -49,6 +49,7 @@ export interface InstructorProfileData {
   totalDurationMinutes: number;
   studentCount: number;
   hourlyRate: number | null;
+  isTrending: boolean;
   createdAt: Date;
 }
 
@@ -91,6 +92,7 @@ export class InstructorsService {
       priceMin,
       priceMax,
       sortBy = InstructorSortBy.NEWLY_PUBLISHED,
+      trending,
     } = dto;
 
     // Base filter: only active tutors
@@ -122,6 +124,11 @@ export class InstructorsService {
         { 'kycData.subjects': { $in: [category] } },
         { 'kycData.category': category },
       ]);
+    }
+
+    // Home page "Trending Instructors": only tutors an admin picked.
+    if (trending) {
+      filter.isTrending = true;
     }
 
     // Filter by level
@@ -172,6 +179,10 @@ export class InstructorsService {
       default:
         sortOption = { createdAt: -1 };
     }
+    // Trending is an admin's curated list: the latest pick leads.
+    if (trending) {
+      sortOption = { trendingAt: -1 };
+    }
 
     const skip = (page - 1) * limit;
     const [users, totalCount] = await Promise.all([
@@ -180,7 +191,7 @@ export class InstructorsService {
         .sort(sortOption)
         .skip(skip)
         .limit(limit)
-        .select('firstName lastName email kycData createdAt')
+        .select('firstName lastName email kycData isTrending createdAt')
         .lean()
         .exec(),
       this.userModel.countDocuments(filter).exec(),
@@ -215,6 +226,7 @@ export class InstructorsService {
         // Onboarding stores `pricePerHour`; older/seeded records use
         // `hourlyRate`. Read both so every tutor's rate actually shows.
         hourlyRate: kc.hourlyRate ?? kc.pricePerHour ?? null,
+        isTrending: Boolean((u as any).isTrending),
         createdAt: u.createdAt,
       };
     });
@@ -435,6 +447,7 @@ export class InstructorsService {
       totalDurationMinutes: kc.totalDurationMinutes ?? 0,
       studentCount: kc.studentCount ?? 0,
       hourlyRate: kc.hourlyRate ?? kc.pricePerHour ?? null,
+      isTrending: Boolean((user as any).isTrending),
       createdAt: user.createdAt,
       education:
         kc.education && kc.education.length > 0

@@ -144,6 +144,20 @@ export class User extends Document {
   @Prop({ type: Date, default: null })
   lastLogin: Date | null;
 
+  @ApiProperty({
+    description:
+      'Tutor picked by an admin for the "Trending Instructors" section on the home page',
+  })
+  @Prop({ default: false })
+  isTrending: boolean;
+
+  @ApiProperty({
+    description: 'When the tutor was last marked trending (newest shows first)',
+    required: false,
+  })
+  @Prop({ type: Date, default: null })
+  trendingAt: Date | null;
+
   @ApiProperty({ description: 'Whether the user is soft-deleted' })
   @Prop({ default: false })
   isDeleted: boolean;
@@ -165,6 +179,8 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });
+// Home page "Trending Instructors": active tutors an admin picked, newest first.
+UserSchema.index({ role: 1, isTrending: 1, trendingAt: -1 });
 UserSchema.index({ isDeleted: 1 });
 UserSchema.index({ emailVerified: 1 });
 UserSchema.index({ createdAt: -1 });

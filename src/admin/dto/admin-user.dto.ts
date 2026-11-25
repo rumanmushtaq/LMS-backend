@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -53,6 +54,15 @@ export class CreateAdminDto {
       'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character',
   })
   password: string;
+}
+
+export class SetTrendingDto {
+  @ApiProperty({
+    description: 'Show this tutor in the home page "Trending Instructors" section',
+    example: true,
+  })
+  @IsBoolean()
+  trending: boolean;
 }
 
 export class UpdateUserStatusDto {

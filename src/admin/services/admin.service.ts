@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery } from 'mongoose';
+import { Model, FilterQuery, Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import {
@@ -884,6 +884,35 @@ export class AdminService {
     }
 
     // Same shape as the list, so the detail page reads the same fields.
+    return this.withSubjects(tutor);
+  }
+
+  /**
+   * Shows or hides a tutor in the home page "Trending Instructors" section.
+   * Marking stamps trendingAt, so the most recent picks lead the section.
+   */
+  async setTeacherTrending(
+    tutorId: string,
+    trending: boolean,
+  ): Promise<TutorRow> {
+    if (!Types.ObjectId.isValid(tutorId)) {
+      throw new NotFoundException('Tutor not found');
+    }
+    const tutor = await this.userModel
+      .findOneAndUpdate(
+        {
+          _id: new Types.ObjectId(tutorId),
+          role: UserRole.TUTOR,
+          isDeleted: { $ne: true },
+        },
+        { $set: { isTrending: trending, trendingAt: trending ? new Date() : null } },
+        { new: true },
+      )
+      .exec();
+
+    if (!tutor) {
+      throw new NotFoundException('Tutor not found');
+    }
     return this.withSubjects(tutor);
   }
 

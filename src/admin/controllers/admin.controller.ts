@@ -27,6 +27,7 @@ import {
   UpdateUserRoleDto,
   AdminUpdateUserDto,
   UserQueryDto,
+  SetTrendingDto,
 } from '../dto/admin-user.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -286,6 +287,15 @@ export class AdminController {
   @ApiParam({ name: 'id', description: 'Teacher ID' })
   getTeacherById(@Param('id') id: string): Promise<TutorRow> {
     return this.adminService.getTeacherById(id);
+  }
+
+  @Patch('tutors/:id/trending')
+  @ApiOperation({
+    summary: 'Show or hide a tutor in the home page "Trending Instructors"',
+  })
+  @ApiParam({ name: 'id', description: 'Tutor ID' })
+  setTeacherTrending(@Param('id') id: string, @Body() dto: SetTrendingDto) {
+    return this.adminService.setTeacherTrending(id, dto.trending);
   }
 
   @Post('tutors/:id/approve')

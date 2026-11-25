@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsEnum,
@@ -8,6 +8,7 @@ import {
   IsString,
   Max,
   Min,
+  IsBoolean,
 } from 'class-validator';
 
 export enum InstructorSortBy {
@@ -99,4 +100,16 @@ export class GetInstructorsDto {
   @IsOptional()
   @IsEnum(InstructorSortBy)
   sortBy?: InstructorSortBy = InstructorSortBy.NEWLY_PUBLISHED;
+
+  @ApiPropertyOptional({
+    description:
+      'Only tutors an admin marked trending, most recently marked first (home page section)',
+    example: true,
+  })
+  @IsOptional()
+  // Query strings arrive as text: "true" must not be read as a truthy string
+  // and "false" must not turn the filter on.
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  trending?: boolean;
 }
