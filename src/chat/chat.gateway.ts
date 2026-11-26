@@ -334,6 +334,14 @@ export class ChatGateway
     );
     const participantIds = conversation.participants.map((p) => p.toString());
 
+    // Name of whoever sent this: shown on the live message itself (the live
+    // Q&A panel otherwise only has an id and prints "User") and used to label
+    // the notification below instead of a placeholder.
+    const senderName = await this.chatService.getParticipantName(
+      conversationId,
+      senderId,
+    );
+
     // Deliver once per socket. Recipients viewing the thread are in the
     // conversation room *and* their personal room, so a single emit across
     // both room sets is what keeps them from receiving the message twice —
@@ -344,14 +352,7 @@ export class ChatGateway
         `conversation_${conversationId}`,
         ...participantIds.map((id) => `user_${id}`),
       ])
-      .emit('newMessage', message);
-
-    // Name of whoever sent this, so a notification can label the chat it opens
-    // instead of falling back to a placeholder.
-    const senderName = await this.chatService.getParticipantName(
-      conversationId,
-      senderId,
-    );
+      .emit('newMessage', { ...message.toJSON(), senderName });
 
     for (const participantId of participantIds) {
       if (participantId === senderId) continue;
