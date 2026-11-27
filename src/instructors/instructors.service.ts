@@ -55,6 +55,8 @@ export interface InstructorProfileData {
 
 export interface InstructorDetailData extends InstructorProfileData {
   aboutMe: string | null;
+  /** Intro video from onboarding or the legacy migration (upload or YouTube/Vimeo link). */
+  introVideoUrl: string | null;
   education: EducationItem[];
   experience: ExperienceItem[];
   certifications: string[];
@@ -438,6 +440,7 @@ export class InstructorsService {
       title: kc.title || null,
       bio: kc.bio || null,
       aboutMe: kc.aboutMe || kc.bio || defaultAboutMe,
+      introVideoUrl: kc.introVideoUrl || null,
       specialties: kc.specialties || [],
       categories: kc.categories || [],
       level: kc.level || null,
